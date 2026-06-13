@@ -197,7 +197,7 @@ function ensurePreviewWidget(node) {
   widget.serialize = false;
   widget.__easyuseAnimaPreviewHeight = 220;
   widget.computeSize = function (width) {
-    return [width, this.__easyuseAnimaPreviewHeight ?? 220];
+    return [width, PREVIEW_MIN_HEIGHT];
   };
   widget.inputEl.readOnly = true;
   widget.inputEl.style.opacity = 0.7;
