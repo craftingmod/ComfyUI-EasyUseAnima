@@ -9,6 +9,26 @@ const STORAGE_WIDGETS = [
   "cached_height",
   "cached_signature",
 ];
+const NAIA_OVERRIDE_WIDGETS = [
+  "pre_prompt",
+  "post_prompt",
+  "auto_hide",
+  "remove_author",
+  "remove_work_title",
+  "remove_character_name",
+  "remove_character_features",
+  "remove_clothes",
+  "remove_color",
+  "remove_location_and_background_color",
+  "remove_expression",
+  "remove_pose_action",
+  "remove_meta_tags",
+  "remove_object_tags",
+  "remove_noise_tags",
+  "e621_auto_boost",
+  "danbooru_auto_weight",
+  "tag_implication_compression",
+];
 
 function firstValue(value, fallback = "") {
   if (Array.isArray(value)) {
@@ -48,6 +68,49 @@ function hideStorageWidgets(node) {
       widget.inputEl.style.display = "none";
     }
   }
+}
+
+function setWidgetVisible(widget, visible) {
+  widget.hidden = !visible;
+  if (widget.inputEl) {
+    widget.inputEl.style.display = visible ? "" : "none";
+  }
+}
+
+function refreshNodeSize(node) {
+  requestAnimationFrame(() => {
+    const size = node.computeSize();
+    node.onResize?.([Math.max(size[0], node.size[0]), Math.max(size[1], node.size[1])]);
+    app.graph.setDirtyCanvas(true, false);
+  });
+}
+
+function updateNaiaSettingsVisibility(node) {
+  const useNaiaSettings = findWidget(node, "use_naia_settings");
+  const showOverrides = !useNaiaSettings || useNaiaSettings.value === false;
+
+  for (const name of NAIA_OVERRIDE_WIDGETS) {
+    const widget = findWidget(node, name);
+    if (!widget) {
+      continue;
+    }
+    setWidgetVisible(widget, showOverrides);
+  }
+  refreshNodeSize(node);
+}
+
+function hookUseNaiaSettingsWidget(node) {
+  const widget = findWidget(node, "use_naia_settings");
+  if (!widget || widget.__easyuseAnimaHooked) {
+    return;
+  }
+  const callback = widget.callback;
+  widget.callback = function (value) {
+    const result = callback?.apply(this, arguments);
+    updateNaiaSettingsVisibility(node);
+    return result;
+  };
+  widget.__easyuseAnimaHooked = true;
 }
 
 function ensurePreviewWidget(node) {
@@ -100,11 +163,7 @@ function updatePreview(node, message) {
   const preview = ensurePreviewWidget(node);
   preview.value = previewText(status, width, height, prompt, negative);
 
-  requestAnimationFrame(() => {
-    const size = node.computeSize();
-    node.onResize?.([Math.max(size[0], node.size[0]), Math.max(size[1], node.size[1])]);
-    app.graph.setDirtyCanvas(true, false);
-  });
+  refreshNodeSize(node);
 }
 
 function updatePreviewFromWidgets(node) {
@@ -132,6 +191,8 @@ app.registerExtension({
     nodeType.prototype.onNodeCreated = function () {
       onNodeCreated?.apply(this, arguments);
       hideStorageWidgets(this);
+      hookUseNaiaSettingsWidget(this);
+      updateNaiaSettingsVisibility(this);
       ensurePreviewWidget(this);
       updatePreviewFromWidgets(this);
     };
@@ -140,6 +201,8 @@ app.registerExtension({
     nodeType.prototype.onConfigure = function () {
       onConfigure?.apply(this, arguments);
       hideStorageWidgets(this);
+      hookUseNaiaSettingsWidget(this);
+      updateNaiaSettingsVisibility(this);
       updatePreviewFromWidgets(this);
     };
 

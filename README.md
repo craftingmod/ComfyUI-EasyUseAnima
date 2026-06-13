@@ -16,7 +16,7 @@ Reference baseline:
 
 ### Anima NAIA Random Prompt
 
-Category: `Anima/NAIA`
+Category: `NAIA Bridge/API`
 
 Outputs:
 

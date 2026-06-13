@@ -316,7 +316,7 @@ class EasyUseAnimaNAIARandomPrompt:
     RETURN_TYPES = ("STRING", "STRING", "INT", "INT")
     RETURN_NAMES = ("prompt", "negative_prompt", "width", "height")
     FUNCTION = "request"
-    CATEGORY = "Anima/NAIA"
+    CATEGORY = "NAIA Bridge/API"
 
     def __init__(self):
         self._cache_signature: Optional[str] = None
