@@ -48,6 +48,33 @@ class PromptCorrectorTests(unittest.TestCase):
         self.assertIn("long hair", data["unknown_tags"])
         self.assertIn("character \\(series\\)", data["unknown_tags"])
 
+    def test_preserves_natural_language_case_and_splits_sentence_count_tag(self):
+        corrected, report = EasyUseAnimaPromptCorrector().correct(
+            (
+                "(@akazawa kureha:0.35), "
+                "An intelligent and neat girl with long silver hair. 1girl, "
+                "(A highly aesthetic Pixiv style illustration, clean composition.:0.6)"
+            ),
+            False,
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+        )
+
+        self.assertEqual(
+            corrected,
+            (
+                "1girl, (@akazawa_kureha:0.35), "
+                "An intelligent and neat girl with long silver hair., "
+                "(A highly aesthetic Pixiv style illustration, clean composition.:0.6)"
+            ),
+        )
+        data = json.loads(report)
+        self.assertEqual(data["sections"][0], "count")
+
     def test_uses_animadex_indexes(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

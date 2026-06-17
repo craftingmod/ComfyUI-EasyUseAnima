@@ -2,7 +2,17 @@
 
 from __future__ import annotations
 
+import re
+
 from .models import ParsedPrompt
+
+_SENTENCE_COUNT_SPLIT_RE = re.compile(
+    r"(?<=[.!?])\s+(?=(?:"
+    r"solo|no humans|multiple boys|multiple girls|multiple others|"
+    r"[1-6]\+?\s*(?:boys?|girls?|others?)"
+    r")\b)",
+    re.IGNORECASE,
+)
 
 
 def parse_prompt(text: str, *, profile: str = "prompt") -> ParsedPrompt:
@@ -16,6 +26,7 @@ def parse_prompt(text: str, *, profile: str = "prompt") -> ParsedPrompt:
     profile = (profile or "prompt").strip().lower()
     delimiter = ", "
     tokens = _split_prompt_tokens(text)
+    tokens = _split_sentence_count_tokens(tokens)
     tokens = [part for part in tokens if part]
     return ParsedPrompt(
         text=text,
@@ -48,6 +59,14 @@ def _split_prompt_tokens(text: str) -> list[str]:
             start = index + 1
     tokens.append(text[start:].strip())
     return tokens
+
+
+def _split_sentence_count_tokens(tokens: list[str]) -> list[str]:
+    split_tokens: list[str] = []
+    for token in tokens:
+        parts = [part.strip() for part in _SENTENCE_COUNT_SPLIT_RE.split(token) if part.strip()]
+        split_tokens.extend(parts or [token])
+    return split_tokens
 
 
 def render_tags(tags: list[str], delimiter: str) -> str:

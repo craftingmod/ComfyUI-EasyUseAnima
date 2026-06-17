@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 
 from .knowledge import PromptKnowledgeBase
@@ -9,6 +10,8 @@ from .models import CorrectionResult, TagToken
 from .normalize import lookup_key, normalize_tag, render_artist_tag
 from .ordering import classify_tag, section_sort_key
 from .parser import parse_prompt, render_tags
+
+_WORD_RE = re.compile(r"[A-Za-z]+")
 
 
 @dataclass(frozen=True)
@@ -82,14 +85,32 @@ def _escape_literal_parentheses(text: str) -> str:
     return "".join(chars)
 
 
-def _render_token(raw: str, section_name: str) -> str:
+def _is_natural_language_token(text: str) -> bool:
+    stripped = str(text or "").strip()
+    if not stripped or stripped.startswith("@"):
+        return False
+    if any(char in stripped for char in ".!?"):
+        return True
+    if "," in stripped:
+        return True
+    return len(_WORD_RE.findall(stripped)) >= 6
+
+
+def _render_token(raw: str, section_name: str, *, preserve_text: bool = False) -> str:
+    if preserve_text:
+        return _escape_literal_parentheses(str(raw or "").strip())
     if section_name == "artist":
         return _escape_literal_parentheses(render_artist_tag(raw))
     return _escape_literal_parentheses(normalize_tag(raw))
 
 
 def _render_prompt_token(syntax: PromptSyntax, normalized: str, section_name: str) -> str:
-    rendered = _render_token(normalized, section_name)
+    preserve_text = _is_natural_language_token(syntax.tag_text)
+    rendered = _render_token(
+        syntax.tag_text if preserve_text else normalized,
+        section_name,
+        preserve_text=preserve_text,
+    )
     return f"{syntax.prefix}{rendered}{syntax.weight_suffix}{syntax.suffix}"
 
 

@@ -34,6 +34,9 @@ quality / meta / year / safety
   example `(long_hair:1.2)`.
 - Literal parentheses in tag names are rendered escaped as `\(` and `\)`.
 - Commas inside unescaped parentheses are preserved inside the weighted token.
+- Natural-language prompt text keeps its original casing.
+- Count tags such as `1girl` are split from a preceding sentence ending when the
+  source text omitted a comma after the sentence.
 
 Example:
 

@@ -69,6 +69,9 @@ Prompt syntax:
 - Literal parentheses in tag names are escaped as `\(` and `\)` in the corrected
   output.
 - Commas inside unescaped parentheses are not split as top-level tag separators.
+- Natural-language prompt text keeps its original casing.
+- If a natural-language sentence is immediately followed by a count tag such as
+  `1girl`, the count tag is split out and reordered normally.
 
 AnimaDex data can be supplied with explicit paths:
 
