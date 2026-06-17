@@ -9,14 +9,6 @@ const FIELD_NAMES = [
   "trailing_quality_tags",
 ];
 
-const FIELD_LABELS = {
-  lora_trigger_tags: "LoRA trigger render",
-  quality_tags: "Leading quality render",
-  trigger_and_artist_tags: "Trigger / artist render",
-  prompt: "Prompt render",
-  trailing_quality_tags: "Trailing render",
-};
-
 const FIELD_HEIGHTS = {
   lora_trigger_tags: 42,
   quality_tags: 72,
@@ -26,20 +18,18 @@ const FIELD_HEIGHTS = {
 };
 
 const SECTION_STYLES = {
-  count: { label: "인원수", fill: "#2563eb", text: "#ffffff" },
-  character: { label: "캐릭터", fill: "#db2777", text: "#ffffff" },
-  artist: { label: "작가", fill: "#7c3aed", text: "#ffffff" },
-  copyright: { label: "작품", fill: "#ea580c", text: "#ffffff" },
-  meta: { label: "메타", fill: "#64748b", text: "#ffffff" },
-  general: { label: "학습 태그", fill: "#16a34a", text: "#ffffff" },
-  natural: { label: "자연어", fill: "#475569", text: "#ffffff" },
-  unknown: { label: "미확인", fill: "#dc2626", text: "#ffffff" },
+  count: { label: "인원수", color: "#60a5fa", weight: 700 },
+  character: { label: "캐릭터", color: "#f472b6", weight: 700 },
+  artist: { label: "작가", color: "#a78bfa", weight: 700 },
+  copyright: { label: "작품", color: "#fb923c", weight: 700 },
+  meta: { label: "메타", color: "#94a3b8", weight: 600 },
+  general: { label: "학습 태그", color: "#4ade80", weight: 600 },
+  natural: { label: "자연어", color: "#cbd5e1", weight: 400 },
+  unknown: { label: "미확인", color: "#f87171", weight: 700 },
 };
 
-const RENDER_MIN_HEIGHT = 34;
-const RENDER_MAX_HEIGHT = 132;
-const CHIP_HEIGHT = 18;
-const CHIP_GAP = 6;
+const WEIGHTED_TOKEN_RE = /^\((.*):[-+]?\d+(?:\.\d+)?\)$/s;
+const INLINE_SPACE_RE = /[ \t]+/g;
 
 function findWidget(node, name) {
   return node.widgets?.find((widget) => widget.name === name);
@@ -81,143 +71,234 @@ async function classifyPrompt(text) {
   return Array.isArray(data.tokens) ? data.tokens : [];
 }
 
-function insertCustomWidgetAfter(node, afterWidget, widget) {
-  node.widgets ||= [];
-  const current = node.widgets.indexOf(widget);
-  if (current >= 0) {
-    node.widgets.splice(current, 1);
+function escapeHtml(value) {
+  return String(value ?? "")
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;");
+}
+
+function normalize(value) {
+  return String(value ?? "")
+    .normalize("NFKC")
+    .replaceAll("_", " ")
+    .toLocaleLowerCase()
+    .replace(INLINE_SPACE_RE, " ")
+    .trim();
+}
+
+function tokenBase(token) {
+  const value = String(token ?? "").trim();
+  const weighted = WEIGHTED_TOKEN_RE.exec(value);
+  if (weighted) {
+    return weighted[1].trim().replace(/^@/, "");
   }
-  const after = node.widgets.indexOf(afterWidget);
-  node.widgets.splice(after >= 0 ? after + 1 : node.widgets.length, 0, widget);
-}
-
-function roundedRect(ctx, x, y, width, height, radius) {
-  const r = Math.min(radius, width / 2, height / 2);
-  ctx.beginPath();
-  ctx.moveTo(x + r, y);
-  ctx.arcTo(x + width, y, x + width, y + height, r);
-  ctx.arcTo(x + width, y + height, x, y + height, r);
-  ctx.arcTo(x, y + height, x, y, r);
-  ctx.arcTo(x, y, x + width, y, r);
-  ctx.closePath();
-}
-
-function tokenLabel(token) {
-  const style = SECTION_STYLES[token.section];
-  const section = token.label || style?.label || token.section || "태그";
-  return `${token.base || token.token} · ${section}`;
-}
-
-function chipRows(ctx, tokens, width) {
-  if (!tokens.length) {
-    return 1;
+  if (value.startsWith("@")) {
+    return value.slice(1).trim();
   }
-  let x = 12;
-  let rows = 1;
-  ctx.font = "11px sans-serif";
-  for (const token of tokens) {
-    const label = tokenLabel(token);
-    const chipWidth = Math.min(width - 24, ctx.measureText(label).width + 18);
-    if (x + chipWidth > width - 12) {
-      x = 12;
-      rows += 1;
+  return value;
+}
+
+function splitPromptText(text) {
+  const parts = [];
+  let start = 0;
+  let depth = 0;
+  let escaped = false;
+  const value = String(text ?? "");
+
+  for (let index = 0; index < value.length; index += 1) {
+    const char = value[index];
+    if (escaped) {
+      escaped = false;
+      continue;
     }
-    x += chipWidth + CHIP_GAP;
+    if (char === "\\") {
+      escaped = true;
+      continue;
+    }
+    if (char === "(") {
+      depth += 1;
+      continue;
+    }
+    if (char === ")" && depth > 0) {
+      depth -= 1;
+      continue;
+    }
+    if ((char === "," || char === "\n") && depth === 0) {
+      if (index > start) {
+        parts.push({ text: value.slice(start, index), delimiter: false });
+      }
+      parts.push({ text: char, delimiter: true });
+      start = index + 1;
+    }
   }
-  return rows;
+
+  if (start < value.length) {
+    parts.push({ text: value.slice(start), delimiter: false });
+  }
+  return parts;
 }
 
-function desiredRenderHeight(ctx, tokens, width) {
-  if (!tokens.length) {
-    return RENDER_MIN_HEIGHT;
-  }
-  const rows = chipRows(ctx, tokens, width);
-  return Math.max(RENDER_MIN_HEIGHT, Math.min(RENDER_MAX_HEIGHT, 26 + rows * (CHIP_HEIGHT + 4)));
+function tokenStyle(token) {
+  const style = SECTION_STYLES[token?.section] || SECTION_STYLES.unknown;
+  const opacity = token?.learned || token?.section === "count" ? 1 : 0.88;
+  return [
+    `color: ${style.color}`,
+    `font-weight: ${style.weight}`,
+    `opacity: ${opacity}`,
+  ].join("; ");
 }
 
-function drawRenderPanel(ctx, widget, width, y) {
-  const tokens = widget.__tokens || [];
-  const title = FIELD_LABELS[widget.__fieldName] || "Prompt render";
+function tokenTitle(token) {
+  const style = SECTION_STYLES[token?.section] || SECTION_STYLES.unknown;
+  const label = token?.label || style.label || token?.section || "태그";
+  const learned = token?.learned ? " / learned" : "";
+  return `${label}${learned}`;
+}
 
-  ctx.save();
-  ctx.fillStyle = "rgba(15, 23, 42, 0.72)";
-  roundedRect(ctx, 8, y + 3, width - 16, widget.__height - 6, 7);
-  ctx.fill();
+function renderHighlightedText(text, tokens) {
+  const byBase = new Map();
+  for (const token of tokens || []) {
+    byBase.set(normalize(token.base || token.token), token);
+  }
 
-  ctx.font = "10px sans-serif";
-  ctx.fillStyle = "#94a3b8";
-  ctx.fillText(title, 14, y + 16);
+  let tokenIndex = 0;
+  const html = [];
+  for (const part of splitPromptText(text)) {
+    if (part.delimiter) {
+      html.push(escapeHtml(part.text));
+      continue;
+    }
 
-  if (!tokens.length) {
-    ctx.fillStyle = "#64748b";
-    ctx.fillText(widget.__status || "No rendered tags.", 14, y + 30);
-    ctx.restore();
+    const match = /^(\s*)([\s\S]*?)(\s*)$/.exec(part.text);
+    const leading = match?.[1] || "";
+    const body = match?.[2] || "";
+    const trailing = match?.[3] || "";
+    if (!body) {
+      html.push(escapeHtml(part.text));
+      continue;
+    }
+
+    const baseKey = normalize(tokenBase(body));
+    const sequential = tokens?.[tokenIndex];
+    const token = normalize(sequential?.base || sequential?.token) === baseKey
+      ? sequential
+      : byBase.get(baseKey);
+    tokenIndex += 1;
+
+    if (!token) {
+      html.push(escapeHtml(part.text));
+      continue;
+    }
+
+    html.push(escapeHtml(leading));
+    html.push(
+      `<span style="${tokenStyle(token)}" title="${escapeHtml(tokenTitle(token))}">`
+      + escapeHtml(body)
+      + "</span>",
+    );
+    html.push(escapeHtml(trailing));
+  }
+  return html.join("") || " ";
+}
+
+function copyInputTextMetrics(input, overlay) {
+  const style = getComputedStyle(input);
+  const properties = [
+    "font",
+    "fontFamily",
+    "fontSize",
+    "fontWeight",
+    "fontStyle",
+    "lineHeight",
+    "letterSpacing",
+    "padding",
+    "border",
+    "borderRadius",
+    "textAlign",
+    "textTransform",
+    "tabSize",
+  ];
+  for (const property of properties) {
+    overlay.style[property] = style[property];
+  }
+}
+
+function syncOverlayBounds(input, overlay) {
+  const parent = input.parentElement;
+  if (!parent) {
     return;
   }
-
-  let x = 12;
-  let rowY = y + 22;
-  ctx.font = "11px sans-serif";
-  for (const token of tokens.slice(0, 96)) {
-    const style = SECTION_STYLES[token.section] || SECTION_STYLES.unknown;
-    const label = tokenLabel(token);
-    const chipWidth = Math.min(width - 24, ctx.measureText(label).width + 18);
-    if (x + chipWidth > width - 12) {
-      x = 12;
-      rowY += CHIP_HEIGHT + 4;
-    }
-    if (rowY + CHIP_HEIGHT > y + widget.__height - 8) {
-      ctx.fillStyle = "#94a3b8";
-      ctx.fillText(`+${tokens.length - tokens.indexOf(token)} more`, x, rowY + 13);
-      break;
-    }
-    ctx.fillStyle = style.fill;
-    roundedRect(ctx, x, rowY, chipWidth, CHIP_HEIGHT, 9);
-    ctx.fill();
-    if (token.learned) {
-      ctx.strokeStyle = "rgba(255, 255, 255, 0.72)";
-      ctx.lineWidth = 1;
-      roundedRect(ctx, x + 0.5, rowY + 0.5, chipWidth - 1, CHIP_HEIGHT - 1, 8);
-      ctx.stroke();
-    }
-    ctx.fillStyle = style.text;
-    ctx.fillText(label, x + 9, rowY + 13);
-    x += chipWidth + CHIP_GAP;
-  }
-
-  ctx.restore();
+  const parentRect = parent.getBoundingClientRect();
+  const inputRect = input.getBoundingClientRect();
+  overlay.style.left = `${inputRect.left - parentRect.left}px`;
+  overlay.style.top = `${inputRect.top - parentRect.top}px`;
+  overlay.style.width = `${inputRect.width}px`;
+  overlay.style.height = `${inputRect.height}px`;
+  overlay.scrollTop = input.scrollTop;
+  overlay.scrollLeft = input.scrollLeft;
 }
 
-function ensureRenderWidget(node, sourceWidget) {
-  const name = `easyuse_anima_render_${sourceWidget.name}`;
-  let widget = findWidget(node, name);
-  if (widget) {
-    insertCustomWidgetAfter(node, sourceWidget, widget);
-    return widget;
+function ensureHighlightOverlay(input) {
+  if (input.__easyuseAnimaHighlightOverlay) {
+    syncOverlayBounds(input, input.__easyuseAnimaHighlightOverlay);
+    return input.__easyuseAnimaHighlightOverlay;
   }
 
-  widget = {
-    name,
-    type: "easyuse_anima_field_render",
-    serialize: false,
-    __fieldName: sourceWidget.name,
-    __height: RENDER_MIN_HEIGHT,
-    __tokens: [],
-    __status: "No rendered tags.",
-    computeSize(width) {
-      return [width, this.__height];
-    },
-    draw(ctx, _node, width, y) {
-      const nextHeight = desiredRenderHeight(ctx, this.__tokens || [], width);
-      if (Math.abs(nextHeight - this.__height) > 2) {
-        this.__height = nextHeight;
-        refreshNodeSize(_node);
-      }
-      drawRenderPanel(ctx, this, width, y);
-    },
-  };
-  insertCustomWidgetAfter(node, sourceWidget, widget);
-  return widget;
+  const parent = input.parentElement;
+  if (!parent) {
+    return null;
+  }
+  if (getComputedStyle(parent).position === "static") {
+    parent.style.position = "relative";
+  }
+
+  const overlay = document.createElement("pre");
+  overlay.className = "easyuse-anima-highlight-overlay";
+  overlay.setAttribute("aria-hidden", "true");
+  overlay.style.cssText = [
+    "position: absolute",
+    "box-sizing: border-box",
+    "margin: 0",
+    "overflow: hidden",
+    "white-space: pre-wrap",
+    "word-break: break-word",
+    "pointer-events: none",
+    "z-index: 0",
+    "background: transparent",
+    "color: var(--input-text, #ddd)",
+  ].join("; ");
+  copyInputTextMetrics(input, overlay);
+  parent.insertBefore(overlay, input);
+
+  input.style.position = input.style.position || "relative";
+  input.style.zIndex = "1";
+  input.style.background = "transparent";
+  input.style.color = "transparent";
+  input.style.caretColor = "var(--input-text, #ddd)";
+  input.style.webkitTextFillColor = "transparent";
+
+  input.addEventListener("scroll", () => syncOverlayBounds(input, overlay));
+  input.__easyuseAnimaHighlightOverlay = overlay;
+  syncOverlayBounds(input, overlay);
+  return overlay;
+}
+
+function updateHighlight(widget, tokens = widget.__easyuseAnimaTokens || []) {
+  const input = widget?.inputEl;
+  if (!(input instanceof HTMLTextAreaElement || input instanceof HTMLInputElement)) {
+    return;
+  }
+  const overlay = ensureHighlightOverlay(input);
+  if (!overlay) {
+    return;
+  }
+  copyInputTextMetrics(input, overlay);
+  syncOverlayBounds(input, overlay);
+  const value = input.value || widget.value || "";
+  overlay.innerHTML = value
+    ? renderHighlightedText(value, tokens)
+    : `<span style="opacity: 0.45">${escapeHtml(input.placeholder || "")}</span>`;
 }
 
 function enhanceResizableInput(node, widget) {
@@ -254,8 +335,10 @@ function enhanceResizableInput(node, widget) {
       input.style.height = `${height}px`;
       refreshNodeSize(node);
     }
+    updateHighlight(widget);
   };
 
+  updateHighlight(widget);
   if (input.__easyuseAnimaStudioResizable) {
     return;
   }
@@ -263,11 +346,11 @@ function enhanceResizableInput(node, widget) {
   input.addEventListener("mouseup", syncHeight);
   input.addEventListener("pointerup", syncHeight);
   input.addEventListener("input", syncHeight);
+  input.addEventListener("scroll", () => updateHighlight(widget));
   input.__easyuseAnimaStudioResizable = true;
 }
 
 function hookStudioNode(node) {
-  const renderByField = new Map();
   const updateByField = new Map();
 
   const getUpdateField = (fieldName) => {
@@ -277,36 +360,27 @@ function hookStudioNode(node) {
     let classifySeq = 0;
     const update = debounce(async () => {
       const widget = findWidget(node, fieldName);
-      const renderWidget = renderByField.get(fieldName);
-      if (!widget || !renderWidget) {
+      if (!widget) {
         return;
       }
-      const text = String(widget.value ?? "");
+      const text = String(widget.inputEl?.value ?? widget.value ?? "");
       if (!text.trim()) {
-        renderWidget.__tokens = [];
-        renderWidget.__status = "No rendered tags.";
-        app.graph.setDirtyCanvas(true, false);
+        widget.__easyuseAnimaTokens = [];
+        updateHighlight(widget);
         return;
       }
 
       const seq = ++classifySeq;
-      renderWidget.__status = "Rendering tags...";
-      app.graph.setDirtyCanvas(true, false);
       try {
         const tokens = await classifyPrompt(text);
         if (seq !== classifySeq) {
           return;
         }
-        renderWidget.__tokens = tokens;
-        renderWidget.__status = tokens.length ? "" : "No rendered tags.";
-        refreshNodeSize(node);
-      } catch (error) {
-        if (seq !== classifySeq) {
-          return;
-        }
-        renderWidget.__tokens = [];
-        renderWidget.__status = `Render failed: ${error.message || error}`;
-        app.graph.setDirtyCanvas(true, false);
+        widget.__easyuseAnimaTokens = tokens;
+        updateHighlight(widget, tokens);
+      } catch {
+        widget.__easyuseAnimaTokens = [];
+        updateHighlight(widget);
       }
     });
     updateByField.set(fieldName, update);
@@ -319,18 +393,23 @@ function hookStudioNode(node) {
       continue;
     }
     enhanceResizableInput(node, widget);
-    const renderWidget = ensureRenderWidget(node, widget);
-    renderByField.set(name, renderWidget);
     const updateField = getUpdateField(name);
 
     if (!widget.__easyuseAnimaStudioHooked) {
       const callback = widget.callback;
       widget.callback = function (value) {
         const result = callback?.apply(this, arguments);
+        updateHighlight(widget);
         updateField();
         return result;
       };
-      widget.inputEl?.addEventListener("input", updateField);
+      widget.inputEl?.addEventListener("input", () => {
+        widget.value = widget.inputEl.value;
+        updateHighlight(widget);
+        updateField();
+      });
+      widget.inputEl?.addEventListener("click", () => updateHighlight(widget));
+      widget.inputEl?.addEventListener("keyup", () => updateHighlight(widget));
       widget.__easyuseAnimaStudioHooked = true;
     }
     updateField();
@@ -366,6 +445,7 @@ app.registerExtension({
         const input = widget?.inputEl;
         if (input && widget.__easyuseAnimaHeight) {
           input.style.height = `${widget.__easyuseAnimaHeight}px`;
+          updateHighlight(widget);
         }
       }
       return result;
