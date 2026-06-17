@@ -48,7 +48,14 @@ function findWidget(node, name) {
 function refreshNodeSize(node) {
   requestAnimationFrame(() => {
     const size = node.computeSize();
-    node.onResize?.([Math.max(size[0], node.size[0]), Math.max(size[1], node.size[1])]);
+    const width = Math.max(size[0], node.size?.[0] || size[0]);
+    const height = Math.max(size[1], 80);
+    if (
+      Math.abs(width - (node.size?.[0] || 0)) > 1
+      || Math.abs(height - (node.size?.[1] || 0)) > 1
+    ) {
+      node.onResize?.([width, height]);
+    }
     app.graph.setDirtyCanvas(true, true);
   });
 }
@@ -218,36 +225,44 @@ function enhanceResizableInput(node, widget) {
   if (!(input instanceof HTMLTextAreaElement || input instanceof HTMLInputElement)) {
     return;
   }
-  if (input.__easyuseAnimaStudioResizable) {
-    return;
-  }
 
   const defaultHeight = FIELD_HEIGHTS[widget.name] || 72;
-  widget.__easyuseAnimaHeight = Math.max(
-    defaultHeight,
-    widget.__easyuseAnimaHeight || input.getBoundingClientRect().height || 0,
-  );
+  const readInputHeight = () => {
+    const styleHeight = Number.parseFloat(input.style.height || "");
+    return Math.round(input.offsetHeight || input.clientHeight || styleHeight || defaultHeight);
+  };
+
+  widget.__easyuseAnimaHeight = Math.max(defaultHeight, widget.__easyuseAnimaHeight || 0);
+  input.style.boxSizing = "border-box";
   input.style.resize = "vertical";
   input.style.minHeight = `${Math.min(defaultHeight, 54)}px`;
   input.style.height = `${widget.__easyuseAnimaHeight}px`;
 
-  const computeSize = widget.computeSize;
-  widget.computeSize = function (width) {
-    const base = computeSize?.apply(this, arguments) || [width, defaultHeight];
-    return [base[0], Math.max(base[1], this.__easyuseAnimaHeight || defaultHeight)];
-  };
+  if (!widget.__easyuseAnimaStudioComputeWrapped) {
+    const computeSize = widget.computeSize;
+    widget.computeSize = function (width) {
+      const base = computeSize?.apply(this, arguments) || [width, defaultHeight];
+      return [base[0], Math.max(base[1], this.__easyuseAnimaHeight || defaultHeight)];
+    };
+    widget.__easyuseAnimaStudioComputeWrapped = true;
+  }
 
   const syncHeight = () => {
-    const height = Math.max(defaultHeight, Math.round(input.getBoundingClientRect().height));
+    const height = Math.max(defaultHeight, readInputHeight());
     if (Math.abs(height - widget.__easyuseAnimaHeight) > 2) {
       widget.__easyuseAnimaHeight = height;
+      input.style.height = `${height}px`;
       refreshNodeSize(node);
     }
   };
 
+  if (input.__easyuseAnimaStudioResizable) {
+    return;
+  }
+
   input.addEventListener("mouseup", syncHeight);
   input.addEventListener("pointerup", syncHeight);
-  input.addEventListener("keyup", syncHeight);
+  input.addEventListener("input", syncHeight);
   input.__easyuseAnimaStudioResizable = true;
 }
 

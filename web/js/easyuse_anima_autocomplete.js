@@ -466,15 +466,22 @@ function hookWidget(node, widget) {
   input.__easyuseAnimaAutocomplete = true;
 }
 
-function hookNode(node, nodeData) {
+function hookNode(node, nodeData, attempt = 0) {
   const names = targetWidgets(nodeData);
   if (!names || shouldSkipNode(node, nodeData)) {
     return;
   }
+  let pendingInput = false;
   for (const widget of node.widgets || []) {
     if (names.has(widget.name)) {
+      if (!findInputEl(widget)) {
+        pendingInput = true;
+      }
       hookWidget(node, widget);
     }
+  }
+  if (pendingInput && attempt < 12) {
+    setTimeout(() => hookNode(node, nodeData, attempt + 1), 80);
   }
 }
 
