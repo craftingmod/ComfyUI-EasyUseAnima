@@ -347,7 +347,8 @@ function positionPopup(input) {
   const caretRect = caretClientRect(input);
   const width = Math.max(260, Math.min(380, inputRect.width, window.innerWidth - 8));
   const left = Math.min(window.innerWidth - width - 4, Math.max(4, caretRect.left));
-  const below = caretRect.bottom + 6;
+  const lineHeight = Math.max(14, caretRect.height || Number.parseFloat(getComputedStyle(input).lineHeight) || 18);
+  const below = caretRect.bottom + lineHeight + 4;
   const above = caretRect.top - 286;
   const top = below + 80 < window.innerHeight ? below : Math.max(4, above);
   menu.style.left = `${left}px`;
@@ -391,9 +392,9 @@ function commitSuggestion(state, entry) {
   const token = currentToken(state.input);
   const before = token.value.slice(0, token.start);
   const after = token.value.slice(token.end);
-  const prefix = before && !/[\s,\n]$/.test(before) ? `${before} ` : before;
-  const suffix = after.startsWith(",") || after.startsWith("\n") || after === "" ? after : `, ${after}`;
   const insert = token.query.startsWith("@") ? `@${entry.tag}` : entry.tag;
+  const prefix = normalizeInsertPrefix(before);
+  const suffix = normalizeInsertSuffix(after);
   state.input.value = `${prefix}${insert}${suffix}`;
   const caret = prefix.length + insert.length;
   state.input.setSelectionRange(caret, caret);
@@ -401,6 +402,35 @@ function commitSuggestion(state, entry) {
   state.widget.value = state.input.value;
   state.widget.callback?.(state.input.value);
   hidePopup();
+}
+
+function normalizeInsertPrefix(before) {
+  if (!before) {
+    return "";
+  }
+  if (before.endsWith("\n")) {
+    return before;
+  }
+  if (before.endsWith(",")) {
+    return `${before} `;
+  }
+  if (/[ \t]$/.test(before)) {
+    return before;
+  }
+  return `${before}, `;
+}
+
+function normalizeInsertSuffix(after) {
+  if (!after) {
+    return "";
+  }
+  if (after.startsWith("\n")) {
+    return after;
+  }
+  if (after.startsWith(",")) {
+    return `, ${after.slice(1).replace(/^[ \t]+/, "")}`;
+  }
+  return `, ${after.replace(/^[ \t]+/, "")}`;
 }
 
 function renderResults(state, results) {
