@@ -262,14 +262,90 @@ function currentToken(input) {
   };
 }
 
+function copyCaretMirrorStyle(input, mirror) {
+  const style = getComputedStyle(input);
+  const properties = [
+    "boxSizing",
+    "width",
+    "height",
+    "font",
+    "fontFamily",
+    "fontSize",
+    "fontWeight",
+    "fontStyle",
+    "lineHeight",
+    "letterSpacing",
+    "padding",
+    "border",
+    "textAlign",
+    "textTransform",
+    "tabSize",
+  ];
+  for (const property of properties) {
+    mirror.style[property] = style[property];
+  }
+}
+
+function caretClientRect(input) {
+  const rect = input.getBoundingClientRect();
+  const caret = input.selectionStart ?? String(input.value || "").length;
+  const mirror = document.createElement("div");
+  const marker = document.createElement("span");
+  const value = String(input.value || "");
+
+  mirror.style.cssText = [
+    "position: fixed",
+    `left: ${rect.left}px`,
+    `top: ${rect.top}px`,
+    "visibility: hidden",
+    "overflow: hidden",
+    "white-space: pre-wrap",
+    "overflow-wrap: break-word",
+    "word-break: normal",
+    "pointer-events: none",
+    "z-index: -1",
+  ].join("; ");
+  copyCaretMirrorStyle(input, mirror);
+
+  if (input instanceof HTMLInputElement) {
+    mirror.style.whiteSpace = "pre";
+  }
+
+  mirror.textContent = value.slice(0, caret);
+  marker.textContent = value.slice(caret, caret + 1) || "\u200b";
+  mirror.append(marker);
+  document.body.append(mirror);
+
+  mirror.scrollTop = input.scrollTop;
+  mirror.scrollLeft = input.scrollLeft;
+  const markerRect = marker.getBoundingClientRect();
+  mirror.remove();
+
+  if (!Number.isFinite(markerRect.left) || !Number.isFinite(markerRect.top)) {
+    return rect;
+  }
+  return {
+    left: markerRect.left - (input.scrollLeft || 0),
+    right: markerRect.right - (input.scrollLeft || 0),
+    top: markerRect.top - (input.scrollTop || 0),
+    bottom: markerRect.bottom - (input.scrollTop || 0),
+    width: markerRect.width,
+    height: markerRect.height || Number.parseFloat(getComputedStyle(input).lineHeight) || 18,
+  };
+}
+
 function positionPopup(input) {
   const menu = ensurePopup();
-  const rect = input.getBoundingClientRect();
-  const top = Math.min(window.innerHeight - 80, rect.bottom + 4);
-  const left = Math.min(window.innerWidth - 300, Math.max(4, rect.left));
+  const inputRect = input.getBoundingClientRect();
+  const caretRect = caretClientRect(input);
+  const width = Math.max(260, Math.min(380, inputRect.width, window.innerWidth - 8));
+  const left = Math.min(window.innerWidth - width - 4, Math.max(4, caretRect.left));
+  const below = caretRect.bottom + 6;
+  const above = caretRect.top - 286;
+  const top = below + 80 < window.innerHeight ? below : Math.max(4, above);
   menu.style.left = `${left}px`;
   menu.style.top = `${Math.max(4, top)}px`;
-  menu.style.width = `${Math.max(280, Math.min(rect.width, 520))}px`;
+  menu.style.width = `${width}px`;
 }
 
 async function search(query) {
