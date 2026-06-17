@@ -41,6 +41,38 @@ Main controls:
 
 The `remove_*` preprocessing options are marked as advanced inputs.
 
+### Anima Prompt Builder
+
+Category: `EasyUse Anima/Prompt`
+
+Outputs:
+
+- `prompt`
+- `anima_mod_guidance_quality_tags`
+- `use_anima_mod_guidance`
+- `metadata_prompt`
+
+This node assembles a cleaned prompt from separate prompt fields for NAIA and
+Anima Mod Guidance workflows.
+
+Input fields:
+
+- `quality_tags`: leading quality tags.
+- `trigger_and_artist_tags`: manual model triggers and `@artist` tags.
+- `lora_trigger_tags`: trigger tags received from a LoRA manager.
+- `prompt`: main prompt body, including NAIA output.
+- `trailing_quality_tags`: trailing quality or style tags.
+
+Behavior:
+
+- Line breaks are treated as comma separators.
+- Empty comma groups and duplicate whitespace are cleaned.
+- `use_anima_mod_guidance=true`: `prompt` output excludes the quality fields;
+  quality fields are returned through `anima_mod_guidance_quality_tags`.
+- `metadata_prompt` always includes quality fields regardless of AMG mode.
+- `pin_trigger_tags_to_front=true`: trigger fields are fixed at the front before
+  quality tags instead of being placed after leading quality tags.
+
 ### Anima Prompt Corrector
 
 Category: `EasyUse Anima/Prompt`
@@ -90,10 +122,10 @@ If explicit paths are empty, the node also checks these environment variables:
 Default local discovery also checks:
 
 ```text
-__animadex__/index/character_index.jsonl
-__animadex__/index/artist_index.jsonl
-__animadex__/import/characters.csv
-__animadex__/import/artists.csv
+__easyuse_anima__/index/character_index.jsonl
+__easyuse_anima__/index/artist_index.jsonl
+__easyuse_anima__/import/characters.csv
+__easyuse_anima__/import/artists.csv
 models/animadex/index/character_index.jsonl
 models/animadex/index/artist_index.jsonl
 models/animadex/import/characters.csv
@@ -130,10 +162,10 @@ The same download can also be started from ComfyUI Settings:
 Local storage:
 
 ```text
-__animadex__/import/characters.csv
-__animadex__/import/artists.csv
-__animadex__/index/character_index.jsonl
-__animadex__/index/artist_index.jsonl
+__easyuse_anima__/import/characters.csv
+__easyuse_anima__/import/artists.csv
+__easyuse_anima__/index/character_index.jsonl
+__easyuse_anima__/index/artist_index.jsonl
 ```
 
 By default, if both index files already exist, the node returns `cached` and
@@ -147,8 +179,9 @@ Token options:
 
 Avoid putting a real token directly into workflows. The download node reads the
 token from the ComfyUI settings/API storage or the environment.
-The settings token is stored under `__animadex__/settings.json`, which is ignored
-by git with the downloaded dataset files.
+The settings token is stored under `__easyuse_anima__/settings.json`, which is
+ignored by git with the downloaded dataset files. The old
+`__animadex__/settings.json` path is read as a fallback.
 
 ## Requirements
 

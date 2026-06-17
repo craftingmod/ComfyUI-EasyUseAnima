@@ -4,11 +4,12 @@ import json
 import os
 
 try:
-    from .anima_prompt.knowledge import PACKAGE_DATA_DIR
+    from .anima_prompt.knowledge import LEGACY_PACKAGE_DATA_DIR, PACKAGE_DATA_DIR
 except ImportError:
-    from anima_prompt.knowledge import PACKAGE_DATA_DIR
+    from anima_prompt.knowledge import LEGACY_PACKAGE_DATA_DIR, PACKAGE_DATA_DIR
 
 SETTINGS_FILE = PACKAGE_DATA_DIR / "settings.json"
+LEGACY_SETTINGS_FILE = LEGACY_PACKAGE_DATA_DIR / "settings.json"
 
 DEFAULT_SETTINGS = {
     "animadex.token": "",
@@ -18,10 +19,11 @@ DEFAULT_SETTINGS = {
 
 def get_settings() -> dict:
     settings = dict(DEFAULT_SETTINGS)
-    if not SETTINGS_FILE.is_file():
+    source = SETTINGS_FILE if SETTINGS_FILE.is_file() else LEGACY_SETTINGS_FILE
+    if not source.is_file():
         return settings
     try:
-        data = json.loads(SETTINGS_FILE.read_text(encoding="utf-8"))
+        data = json.loads(source.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError):
         return settings
     if isinstance(data, dict):

@@ -10,11 +10,13 @@ try:
     from .animadex_dataset import download_animadex_dataset
     from .anima_prompt import correct_prompt, load_knowledge_base
     from .anima_prompt.knowledge import PACKAGE_DATA_DIR
+    from .anima_prompt.parser import parse_prompt
     from .settings import resolve_animadex_site
 except ImportError:  # allows simple local import tests outside ComfyUI's package loader
     from animadex_dataset import download_animadex_dataset
     from anima_prompt import correct_prompt, load_knowledge_base
     from anima_prompt.knowledge import PACKAGE_DATA_DIR
+    from anima_prompt.parser import parse_prompt
     from settings import resolve_animadex_site
 
 logger = logging.getLogger("ComfyUI-EasyUseAnima")
@@ -48,6 +50,7 @@ PP_STATE_CHOICES = ["skip", "on", "off"]
 
 _HASH_COMMENT_RE = re.compile(r"^[ \t]*#[^\n]*", re.MULTILINE)
 _MULTI_COMMA_RE = re.compile(r"(\s*,){2,}")
+_INLINE_SPACE_RE = re.compile(r"[ \t]+")
 DEFAULT_ANIMADEX_SITE = "https://animadex.net"
 
 
@@ -97,6 +100,26 @@ def _split_tag_text(value: str) -> list[str]:
     for line in str(value).splitlines():
         parts.extend(part.strip() for part in line.split(","))
     return [part for part in parts if part]
+
+
+def _prompt_tokens(value: str) -> list[str]:
+    if not value:
+        return []
+    normalized = str(value).replace("\r\n", "\n").replace("\r", "\n")
+    normalized = normalized.replace("，", ",").replace("\n", ",")
+    tokens: list[str] = []
+    for token in parse_prompt(normalized, profile="prompt").tokens:
+        cleaned = _INLINE_SPACE_RE.sub(" ", str(token).strip(" ,\n\t"))
+        if cleaned:
+            tokens.append(cleaned)
+    return tokens
+
+
+def _join_prompt_tokens(*parts: str) -> str:
+    tokens: list[str] = []
+    for part in parts:
+        tokens.extend(_prompt_tokens(part))
+    return ", ".join(tokens)
 
 
 def _fit_to_1mp(width: int, height: int) -> tuple[int, int]:
@@ -302,6 +325,122 @@ class EasyUseAnimaPromptCorrector:
         return (
             result.text,
             json.dumps(report, ensure_ascii=False, indent=2),
+        )
+
+
+class EasyUseAnimaPromptBuilder:
+    """Build cleaned ANIMA prompts for NAIA and Anima Mod Guidance workflows."""
+
+    @classmethod
+    def INPUT_TYPES(cls):
+        return {
+            "required": {
+                "use_anima_mod_guidance": ("BOOLEAN", {
+                    "default": False,
+                    "tooltip": (
+                        "true: output prompt excludes quality fields and sends them "
+                        "through anima_mod_guidance_quality_tags."
+                    ),
+                }),
+                "pin_trigger_tags_to_front": ("BOOLEAN", {
+                    "default": False,
+                    "tooltip": (
+                        "true: keep trigger/artist and LoRA trigger fields at the very front "
+                        "instead of placing quality tags before them."
+                    ),
+                }),
+                "quality_tags": ("STRING", {
+                    "multiline": True,
+                    "default": "masterpiece, best quality",
+                    "tooltip": "Leading quality tags. With AMG enabled, these are excluded from prompt output.",
+                }),
+                "trigger_and_artist_tags": ("STRING", {
+                    "multiline": True,
+                    "default": "",
+                    "tooltip": "Manual model triggers and @artist tags.",
+                }),
+                "lora_trigger_tags": ("STRING", {
+                    "multiline": True,
+                    "default": "",
+                    "tooltip": "Trigger tags received from a LoRA manager or pasted manually.",
+                }),
+                "prompt": ("STRING", {
+                    "multiline": True,
+                    "default": "",
+                    "tooltip": "Main prompt body. This is the expected place for NAIA output.",
+                }),
+                "trailing_quality_tags": ("STRING", {
+                    "multiline": True,
+                    "default": "",
+                    "tooltip": "Trailing quality or style tags.",
+                }),
+            }
+        }
+
+    RETURN_TYPES = ("STRING", "STRING", "BOOLEAN", "STRING")
+    RETURN_NAMES = (
+        "prompt",
+        "anima_mod_guidance_quality_tags",
+        "use_anima_mod_guidance",
+        "metadata_prompt",
+    )
+    FUNCTION = "build"
+    CATEGORY = "EasyUse Anima/Prompt"
+
+    @classmethod
+    def IS_CHANGED(cls, **kwargs):
+        return _stable_change_key({
+            "mode": "prompt_builder",
+            **{key: str(value) for key, value in sorted(kwargs.items())},
+        })
+
+    def build(
+        self,
+        use_anima_mod_guidance: bool,
+        pin_trigger_tags_to_front: bool,
+        quality_tags: str,
+        trigger_and_artist_tags: str,
+        lora_trigger_tags: str,
+        prompt: str,
+        trailing_quality_tags: str,
+    ):
+        use_amg = _as_bool(use_anima_mod_guidance, False)
+        pin_triggers = _as_bool(pin_trigger_tags_to_front, False)
+
+        trigger_prompt = _join_prompt_tokens(trigger_and_artist_tags, lora_trigger_tags)
+        quality_prompt = _join_prompt_tokens(quality_tags, trailing_quality_tags)
+        body_prompt = _join_prompt_tokens(prompt)
+
+        if pin_triggers:
+            metadata_prompt = _join_prompt_tokens(
+                trigger_prompt,
+                quality_tags,
+                body_prompt,
+                trailing_quality_tags,
+            )
+            regular_prompt = _join_prompt_tokens(
+                trigger_prompt,
+                quality_tags,
+                body_prompt,
+                trailing_quality_tags,
+            )
+        else:
+            metadata_prompt = _join_prompt_tokens(
+                quality_tags,
+                trigger_prompt,
+                body_prompt,
+                trailing_quality_tags,
+            )
+            regular_prompt = metadata_prompt
+
+        amg_prompt = _join_prompt_tokens(trigger_prompt, body_prompt)
+        output_prompt = amg_prompt if use_amg else regular_prompt
+
+        return (
+            output_prompt,
+            quality_prompt,
+            use_amg,
+            metadata_prompt,
         )
 
 

@@ -73,13 +73,17 @@ Environment variables:
 
 Default local paths:
 
+- Package-local CSV: `__easyuse_anima__/import/characters.csv`,
+  `__easyuse_anima__/import/artists.csv`
+- Package-local index: `__easyuse_anima__/index/character_index.jsonl`,
+  `__easyuse_anima__/index/artist_index.jsonl`
 - CSV: `models/animadex/import/characters.csv`,
   `models/animadex/import/artists.csv`
 - Index: `models/animadex/index/character_index.jsonl`,
   `models/animadex/index/artist_index.jsonl`
 
-`models/animadex/` is ignored by Registry packaging. Do not commit downloaded
-CSVs or tokens.
+`__easyuse_anima__/` and `models/animadex/` are ignored by Registry packaging.
+Do not commit downloaded CSVs or tokens.
 
 ## AnimaDex Fields
 

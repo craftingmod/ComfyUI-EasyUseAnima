@@ -10,4 +10,5 @@ env/
 .DS_Store
 Thumbs.db
 __animadex__/*
-!__animadex__/.gitkeep
+__easyuse_anima__/*
+!__easyuse_anima__/.gitkeep

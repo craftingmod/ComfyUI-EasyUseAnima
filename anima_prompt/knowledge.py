@@ -21,9 +21,12 @@ DEFAULT_CHARACTER_INDEX_NAME = "character_index.jsonl"
 DEFAULT_ARTIST_INDEX_NAME = "artist_index.jsonl"
 DEFAULT_ANIMADEX_IMPORT_DIR = Path("models") / "animadex" / "import"
 DEFAULT_ANIMADEX_INDEX_DIR = Path("models") / "animadex" / "index"
-PACKAGE_DATA_DIR = Path(__file__).resolve().parents[1] / "__animadex__"
+PACKAGE_DATA_DIR = Path(__file__).resolve().parents[1] / "__easyuse_anima__"
+LEGACY_PACKAGE_DATA_DIR = Path(__file__).resolve().parents[1] / "__animadex__"
 PACKAGE_ANIMADEX_IMPORT_DIR = PACKAGE_DATA_DIR / "import"
 PACKAGE_ANIMADEX_INDEX_DIR = PACKAGE_DATA_DIR / "index"
+LEGACY_PACKAGE_ANIMADEX_IMPORT_DIR = LEGACY_PACKAGE_DATA_DIR / "import"
+LEGACY_PACKAGE_ANIMADEX_INDEX_DIR = LEGACY_PACKAGE_DATA_DIR / "index"
 
 
 class KnowledgeBaseNotFound(FileNotFoundError):
@@ -105,6 +108,7 @@ def load_knowledge_base(
             DEFAULT_CHARACTER_INDEX_NAME,
             extra_defaults=(
                 PACKAGE_ANIMADEX_INDEX_DIR / DEFAULT_CHARACTER_INDEX_NAME,
+                LEGACY_PACKAGE_ANIMADEX_INDEX_DIR / DEFAULT_CHARACTER_INDEX_NAME,
                 DEFAULT_ANIMADEX_INDEX_DIR / DEFAULT_CHARACTER_INDEX_NAME,
             ),
         )
@@ -116,6 +120,7 @@ def load_knowledge_base(
             DEFAULT_ARTIST_INDEX_NAME,
             extra_defaults=(
                 PACKAGE_ANIMADEX_INDEX_DIR / DEFAULT_ARTIST_INDEX_NAME,
+                LEGACY_PACKAGE_ANIMADEX_INDEX_DIR / DEFAULT_ARTIST_INDEX_NAME,
                 DEFAULT_ANIMADEX_INDEX_DIR / DEFAULT_ARTIST_INDEX_NAME,
             ),
         )
@@ -127,6 +132,7 @@ def load_knowledge_base(
             "characters.csv",
             extra_defaults=(
                 PACKAGE_ANIMADEX_IMPORT_DIR / "characters.csv",
+                LEGACY_PACKAGE_ANIMADEX_IMPORT_DIR / "characters.csv",
                 DEFAULT_ANIMADEX_IMPORT_DIR / "characters.csv",
             ),
         )
@@ -138,6 +144,7 @@ def load_knowledge_base(
             "artists.csv",
             extra_defaults=(
                 PACKAGE_ANIMADEX_IMPORT_DIR / "artists.csv",
+                LEGACY_PACKAGE_ANIMADEX_IMPORT_DIR / "artists.csv",
                 DEFAULT_ANIMADEX_IMPORT_DIR / "artists.csv",
             ),
         )
@@ -161,7 +168,9 @@ def load_knowledge_base(
     ):
         raise KnowledgeBaseNotFound(
             "No AnimaDex prompt data found. Put character_index.jsonl and "
-            "artist_index.jsonl under models/animadex/index, put CSV exports "
-            "under models/animadex/import, or pass explicit paths."
+            "artist_index.jsonl under __easyuse_anima__/index or "
+            "models/animadex/index, put CSV exports under "
+            "__easyuse_anima__/import or models/animadex/import, or pass "
+            "explicit paths."
         )
     return PromptKnowledgeBase(animadex=animadex)

@@ -2,6 +2,7 @@
 from .nodes import (
     EasyUseAnimaAnimaDexDatasetDownload,
     EasyUseAnimaNAIARandomPrompt,
+    EasyUseAnimaPromptBuilder,
     EasyUseAnimaPromptCorrector,
 )
 from . import api  # noqa: F401 - registers ComfyUI HTTP routes
@@ -9,12 +10,14 @@ from . import api  # noqa: F401 - registers ComfyUI HTTP routes
 NODE_CLASS_MAPPINGS = {
     "EasyUseAnimaAnimaDexDatasetDownload": EasyUseAnimaAnimaDexDatasetDownload,
     "EasyUseAnimaNAIARandomPrompt": EasyUseAnimaNAIARandomPrompt,
+    "EasyUseAnimaPromptBuilder": EasyUseAnimaPromptBuilder,
     "EasyUseAnimaPromptCorrector": EasyUseAnimaPromptCorrector,
 }
 
 NODE_DISPLAY_NAME_MAPPINGS = {
     "EasyUseAnimaAnimaDexDatasetDownload": "AnimaDex Dataset Download",
     "EasyUseAnimaNAIARandomPrompt": "Anima NAIA Random Prompt",
+    "EasyUseAnimaPromptBuilder": "Anima Prompt Builder",
     "EasyUseAnimaPromptCorrector": "Anima Prompt Corrector",
 }
 

@@ -6,7 +6,11 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from nodes import EasyUseAnimaAnimaDexDatasetDownload, EasyUseAnimaPromptCorrector
+from nodes import (
+    EasyUseAnimaAnimaDexDatasetDownload,
+    EasyUseAnimaPromptBuilder,
+    EasyUseAnimaPromptCorrector,
+)
 from animadex_dataset import dataset_status
 from settings import public_settings
 
@@ -131,6 +135,52 @@ class PromptCorrectorTests(unittest.TestCase):
             data["sections"],
             ["count", "character", "copyright", "artist", "unknown"],
         )
+
+
+class PromptBuilderTests(unittest.TestCase):
+    def test_builds_amg_prompt_and_metadata_prompt(self):
+        prompt, quality, use_amg, metadata = EasyUseAnimaPromptBuilder().build(
+            True,
+            False,
+            "masterpiece,, best quality\n",
+            "@artist_name\nmodel_trigger",
+            "lora trigger",
+            "A Girl  with  Sword,, 1girl",
+            "(high detail:0.6)",
+        )
+
+        self.assertTrue(use_amg)
+        self.assertEqual(
+            prompt,
+            "@artist_name, model_trigger, lora trigger, A Girl with Sword, 1girl",
+        )
+        self.assertEqual(quality, "masterpiece, best quality, (high detail:0.6)")
+        self.assertEqual(
+            metadata,
+            (
+                "masterpiece, best quality, @artist_name, model_trigger, "
+                "lora trigger, A Girl with Sword, 1girl, (high detail:0.6)"
+            ),
+        )
+
+    def test_can_pin_trigger_tags_before_quality_tags(self):
+        prompt, quality, use_amg, metadata = EasyUseAnimaPromptBuilder().build(
+            False,
+            True,
+            "masterpiece",
+            "@artist_name",
+            "lora trigger",
+            "1girl",
+            "best quality",
+        )
+
+        self.assertFalse(use_amg)
+        self.assertEqual(quality, "masterpiece, best quality")
+        self.assertEqual(
+            prompt,
+            "@artist_name, lora trigger, masterpiece, 1girl, best quality",
+        )
+        self.assertEqual(prompt, metadata)
 
 
 class AnimaDexDatasetDownloadTests(unittest.TestCase):

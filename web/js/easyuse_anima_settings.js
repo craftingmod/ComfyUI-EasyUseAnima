@@ -102,7 +102,7 @@ function renderStatusPanel(panel, status) {
   const guide = document.createElement("div");
   guide.style.cssText = "margin-bottom: 8px; line-height: 1.45;";
   guide.textContent =
-    "Paste the AnimaDex export token above, then click Download. Dataset files are saved inside this custom node under __animadex__ and are ignored by git.";
+    "Paste the AnimaDex export token above, then click Download. Dataset files are saved inside this custom node under __easyuse_anima__ and are ignored by git.";
   panel.append(guide);
 
   const banner = document.createElement("div");
