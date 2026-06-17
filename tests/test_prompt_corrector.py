@@ -10,8 +10,9 @@ from nodes import (
     EasyUseAnimaAnimaDexDatasetDownload,
     EasyUseAnimaPromptBuilder,
     EasyUseAnimaPromptCorrector,
+    EasyUseAnimaPromptStudio,
 )
-from autocomplete_dataset import autocomplete_status, search_autocomplete
+from autocomplete_dataset import autocomplete_status, classify_prompt_text, search_autocomplete
 from animadex_dataset import dataset_status
 from settings import public_settings
 
@@ -209,6 +210,28 @@ class PromptBuilderTests(unittest.TestCase):
             "masterpiece, 1girl, @artist_name, long hair",
         )
 
+    def test_prompt_studio_matches_builder_outputs(self):
+        builder_output = EasyUseAnimaPromptBuilder().build(
+            True,
+            False,
+            "masterpiece",
+            "@artist_name",
+            "lora trigger",
+            "1girl, long hair",
+            "best quality",
+        )
+        studio_output = EasyUseAnimaPromptStudio().build(
+            True,
+            False,
+            "masterpiece",
+            "@artist_name",
+            "lora trigger",
+            "1girl, long hair",
+            "best quality",
+        )
+
+        self.assertEqual(studio_output, builder_output)
+
 
 class AnimaDexDatasetDownloadTests(unittest.TestCase):
     def test_dataset_status_reports_downloaded_indexes(self):
@@ -291,6 +314,29 @@ class AutocompleteDatasetTests(unittest.TestCase):
         self.assertEqual(korean["results"][0]["tag"], "long hair")
         self.assertTrue(status["exists"])
         self.assertEqual(status["count"], 3)
+
+    def test_classifies_count_character_and_learned_tags(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "tags.csv"
+            path.write_text(
+                "\n".join(
+                    [
+                        '1girl,0,100,"[인물] 여성 캐릭터 한 명"',
+                        'hatsune miku,4,90,"[캐릭터] 하츠네 미쿠"',
+                        'long hair,0,80,"[헤어] 장발"',
+                    ]
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+
+            result = classify_prompt_text("1girl, hatsune miku, unknown tag", path=path)
+
+        sections = [token["section"] for token in result["tokens"]]
+        self.assertEqual(sections, ["count", "character", "unknown"])
+        self.assertTrue(result["tokens"][0]["learned"])
+        self.assertTrue(result["tokens"][1]["learned"])
+        self.assertFalse(result["tokens"][2]["learned"])
 
 
 if __name__ == "__main__":

@@ -9,8 +9,10 @@ from pathlib import Path
 
 try:
     from .anima_prompt.knowledge import PACKAGE_DATA_DIR
+    from .anima_prompt.parser import parse_prompt
 except ImportError:
     from anima_prompt.knowledge import PACKAGE_DATA_DIR
+    from anima_prompt.parser import parse_prompt
 
 AUTOCOMPLETE_CSV = PACKAGE_DATA_DIR / "KR_danbooru_tags_with_description v3_modified.csv"
 
@@ -26,7 +28,14 @@ _CACHE = {
     "path": None,
     "mtime": None,
     "entries": None,
+    "entry_map": None,
 }
+_COUNT_RE = re.compile(
+    r"^\d+\s*(girl|girls|boy|boys|person|people|other|others|animal|animals|"
+    r"female|females|male|males|child|children)s?$",
+    re.IGNORECASE,
+)
+_WEIGHTED_TOKEN_RE = re.compile(r"^\(([^(),]+):[-+]?\d+(?:\.\d+)?\)$")
 
 
 @dataclass(frozen=True)
@@ -99,7 +108,82 @@ def _entries(path: Path = AUTOCOMPLETE_CSV) -> list[AutocompleteEntry]:
         _CACHE["path"] = str(path)
         _CACHE["mtime"] = mtime
         _CACHE["entries"] = _load_entries(path)
+        _CACHE["entry_map"] = None
     return list(_CACHE["entries"] or [])
+
+
+def _entry_map(path: Path = AUTOCOMPLETE_CSV) -> dict[str, AutocompleteEntry]:
+    _entries(path)
+    if _CACHE["entry_map"] is None:
+        _CACHE["entry_map"] = {
+            _normalize(entry.tag): entry
+            for entry in (_CACHE["entries"] or [])
+        }
+    return _CACHE["entry_map"] or {}
+
+
+def _token_base(token: str) -> str:
+    token = str(token or "").strip()
+    weighted = _WEIGHTED_TOKEN_RE.match(token)
+    if weighted:
+        return weighted.group(1).strip()
+    if token.startswith("@"):
+        return token[1:].strip()
+    return token
+
+
+def _token_section(token: str, entry: AutocompleteEntry | None) -> tuple[str, str]:
+    base = _token_base(token)
+    if _COUNT_RE.match(_normalize(base)):
+        return ("count", "인원수")
+    if entry:
+        labels = {
+            "character": "캐릭터",
+            "artist": "작가",
+            "copyright": "작품",
+            "meta": "메타",
+            "general": "학습 태그",
+        }
+        return (entry.category, labels.get(entry.category, entry.category or "태그"))
+    if str(token or "").strip().startswith("@"):
+        return ("artist", "작가 후보")
+    if len(base) >= 32 or re.search(r"[.!?]", base):
+        return ("natural", "자연어")
+    return ("unknown", "미확인")
+
+
+def classify_prompt_text(text: str, limit: int = 240, path: Path = AUTOCOMPLETE_CSV) -> dict:
+    entries = _entry_map(path)
+    tokens: list[str] = []
+    normalized = str(text or "").replace("\r\n", "\n").replace("\r", "\n")
+    normalized = normalized.replace("，", ",").replace("\n", ",")
+    for token in parse_prompt(normalized, profile="prompt").tokens:
+        token = _INLINE_SPACE_RE.sub(" ", str(token).strip(" ,\n\t"))
+        if token:
+            tokens.append(token)
+        if len(tokens) >= max(1, min(limit, 500)):
+            break
+
+    classified = []
+    for token in tokens:
+        base = _token_base(token)
+        key = _normalize(base)
+        entry = entries.get(key)
+        section, label = _token_section(token, entry)
+        classified.append({
+            "token": token,
+            "base": base,
+            "section": section,
+            "label": label,
+            "learned": entry is not None,
+            "count": entry.count if entry else 0,
+            "description": entry.description if entry else "",
+        })
+
+    return {
+        "tokens": classified,
+        "status": autocomplete_status(path),
+    }
 
 
 def autocomplete_status(path: Path = AUTOCOMPLETE_CSV) -> dict:

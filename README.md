@@ -57,9 +57,9 @@ Anima Mod Guidance workflows.
 
 Input fields:
 
+- `lora_trigger_tags`: one-line trigger tags received from a LoRA manager.
 - `quality_tags`: leading quality tags.
 - `trigger_and_artist_tags`: manual model triggers and `@artist` tags.
-- `lora_trigger_tags`: one-line trigger tags received from a LoRA manager.
 - `prompt`: main prompt body, including NAIA output.
 - `trailing_quality_tags`: trailing quality or style tags.
 
@@ -86,6 +86,24 @@ Autocomplete:
   as LoRA Manager / Lora Stacker nodes, are excluded.
 
 The bundled Korean Danbooru CSV is included with permission from its author.
+
+### Anima Prompt Studio
+
+Category: `EasyUse Anima/Prompt`
+
+This node has the same outputs and prompt-building behavior as `Anima Prompt
+Builder`, but adds front-end editing helpers:
+
+- LoRA trigger input is placed near the top of the node.
+- Prompt text fields can be resized vertically in the node UI.
+- A tag analysis panel highlights detected tokens by category:
+  - `인원수`
+  - `캐릭터`
+  - `작가`
+  - `작품`
+  - `학습 태그`
+  - `미확인`
+- Tags found in the bundled Korean Danbooru CSV are marked as learned tags.
 
 ### Anima Prompt Corrector
 

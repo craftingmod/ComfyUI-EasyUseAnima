@@ -391,6 +391,11 @@ class EasyUseAnimaPromptBuilder:
                         "instead of placing quality tags before them."
                     ),
                 }),
+                "lora_trigger_tags": ("STRING", {
+                    "multiline": False,
+                    "default": "",
+                    "tooltip": "One-line trigger tags received from a LoRA manager or pasted manually.",
+                }),
                 "quality_tags": ("STRING", {
                     "multiline": True,
                     "default": "masterpiece, best quality",
@@ -400,11 +405,6 @@ class EasyUseAnimaPromptBuilder:
                     "multiline": True,
                     "default": "",
                     "tooltip": "Manual model triggers and @artist tags.",
-                }),
-                "lora_trigger_tags": ("STRING", {
-                    "multiline": False,
-                    "default": "",
-                    "tooltip": "One-line trigger tags received from a LoRA manager or pasted manually.",
                 }),
                 "prompt": ("STRING", {
                     "multiline": True,
@@ -495,6 +495,58 @@ class EasyUseAnimaPromptBuilder:
             use_amg,
             metadata_prompt,
         )
+
+
+class EasyUseAnimaPromptStudio(EasyUseAnimaPromptBuilder):
+    """Prompt Builder variant with enhanced front-end editing helpers."""
+
+    @classmethod
+    def INPUT_TYPES(cls):
+        return {
+            "required": {
+                "use_anima_mod_guidance": ("BOOLEAN", {
+                    "default": False,
+                    "tooltip": (
+                        "true: output prompt excludes quality fields and sends them "
+                        "through anima_mod_guidance_quality_tags."
+                    ),
+                }),
+                "pin_trigger_tags_to_front": ("BOOLEAN", {
+                    "default": False,
+                    "tooltip": (
+                        "true: keep trigger/artist and LoRA trigger fields at the very front "
+                        "instead of placing quality tags before them."
+                    ),
+                }),
+                "lora_trigger_tags": ("STRING", {
+                    "multiline": False,
+                    "default": "",
+                    "tooltip": "One-line trigger tags received from a LoRA manager or pasted manually.",
+                }),
+                "quality_tags": ("STRING", {
+                    "multiline": True,
+                    "default": "masterpiece, best quality",
+                    "tooltip": "Leading quality tags. With AMG enabled, these are excluded from prompt output.",
+                }),
+                "trigger_and_artist_tags": ("STRING", {
+                    "multiline": True,
+                    "default": "",
+                    "tooltip": "Manual model triggers and @artist tags.",
+                }),
+                "prompt": ("STRING", {
+                    "multiline": True,
+                    "default": "",
+                    "tooltip": "Main prompt body. This is the expected place for NAIA output.",
+                }),
+                "trailing_quality_tags": ("STRING", {
+                    "multiline": True,
+                    "default": "",
+                    "tooltip": "Trailing quality or style tags.",
+                }),
+            }
+        }
+
+    CATEGORY = "EasyUse Anima/Prompt"
 
 
 class EasyUseAnimaAnimaDexDatasetDownload:

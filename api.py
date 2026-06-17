@@ -9,7 +9,7 @@ except ImportError:
 
 from .settings import public_settings, save_setting
 from .animadex_dataset import dataset_paths, dataset_status, download_animadex_dataset
-from .autocomplete_dataset import autocomplete_status, search_autocomplete
+from .autocomplete_dataset import autocomplete_status, classify_prompt_text, search_autocomplete
 
 
 if server is not None and web is not None:
@@ -76,3 +76,14 @@ if server is not None and web is not None:
         except ValueError:
             limit = 20
         return web.json_response(search_autocomplete(query, limit=limit))
+
+    @server.PromptServer.instance.routes.post("/easyuse_anima/classify_prompt")
+    async def classify_prompt_handler(request):
+        data = await request.json()
+        try:
+            limit = int(data.get("limit", 240))
+        except (TypeError, ValueError):
+            limit = 240
+        return web.json_response(
+            classify_prompt_text(str(data.get("text") or ""), limit=limit)
+        )

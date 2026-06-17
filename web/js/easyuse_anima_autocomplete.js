@@ -8,6 +8,13 @@ const TARGETS = {
     "prompt",
     "trailing_quality_tags",
   ]),
+  EasyUseAnimaPromptStudio: new Set([
+    "quality_tags",
+    "trigger_and_artist_tags",
+    "lora_trigger_tags",
+    "prompt",
+    "trailing_quality_tags",
+  ]),
   EasyUseAnimaPromptCorrector: new Set([
     "prompt",
     "artist_overrides",
