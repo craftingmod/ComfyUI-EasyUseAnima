@@ -83,11 +83,16 @@ function formatFileStatus(fileStatus) {
   return `found (${size} bytes, ${mtime}): ${fileStatus.path}`;
 }
 
-function appendLine(container, label, value) {
+function appendLine(container, label, value, valueStyle = "") {
   const row = document.createElement("div");
   const strong = document.createElement("strong");
+  const span = document.createElement("span");
   strong.textContent = `${label}: `;
-  row.append(strong, document.createTextNode(value));
+  span.textContent = value;
+  if (valueStyle) {
+    span.style.cssText = valueStyle;
+  }
+  row.append(strong, span);
   container.append(row);
 }
 
@@ -100,8 +105,24 @@ function renderStatusPanel(panel, status) {
     "Paste the AnimaDex export token above, then click Download. Dataset files are saved inside this custom node under __animadex__ and are ignored by git.";
   panel.append(guide);
 
+  const banner = document.createElement("div");
+  banner.textContent = status.downloaded
+    ? "AnimaDex dataset is downloaded and ready."
+    : "AnimaDex dataset is not downloaded yet.";
+  banner.style.cssText = status.downloaded
+    ? "margin: 8px 0; padding: 8px 10px; border-radius: 6px; background: rgba(22, 163, 74, 0.16); color: #16a34a; font-weight: 700;"
+    : "margin: 8px 0; padding: 8px 10px; border-radius: 6px; background: rgba(234, 179, 8, 0.14); color: #ca8a04; font-weight: 700;";
+  panel.append(banner);
+
   const statusText = status.downloaded ? "Downloaded" : "Not downloaded";
-  appendLine(panel, "Dataset", statusText);
+  appendLine(
+    panel,
+    "Dataset",
+    statusText,
+    status.downloaded
+      ? "color: #16a34a; font-weight: 700;"
+      : "color: #ca8a04; font-weight: 700;",
+  );
   appendLine(panel, "Token", status.token_configured ? "configured" : "not configured");
   appendLine(panel, "Storage", status.data_dir || "");
   appendLine(panel, "Character index", formatFileStatus(status.character_index));
