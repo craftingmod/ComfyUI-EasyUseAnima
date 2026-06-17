@@ -30,6 +30,7 @@ const SECTION_STYLES = {
 };
 
 const LEGEND_ITEMS = ["count", "character", "artist", "copyright", "general", "meta", "natural", "artist_unknown", "unknown"];
+const LEGEND_TOP_GAP = 14;
 const LEGEND_ROW_HEIGHT = 14;
 
 const WEIGHTED_TOKEN_RE = /^\((.*):[-+]?\d+(?:\.\d+)?\)$/s;
@@ -399,7 +400,7 @@ function ensureHighlightOverlay(input) {
 }
 
 function desiredLegendHeight() {
-  return 18 + LEGEND_ITEMS.length * LEGEND_ROW_HEIGHT;
+  return LEGEND_TOP_GAP + 18 + LEGEND_ITEMS.length * LEGEND_ROW_HEIGHT;
 }
 
 function drawLegend(ctx, node, widget, width, y) {
@@ -412,10 +413,10 @@ function drawLegend(ctx, node, widget, width, y) {
 
   ctx.font = "9px sans-serif";
   ctx.fillStyle = "#94a3b8";
-  ctx.fillText("Color legend", 14, y + 12);
+  ctx.fillText("Color legend", 14, y + LEGEND_TOP_GAP + 12);
 
   const labelX = 28;
-  let rowY = y + 27;
+  let rowY = y + LEGEND_TOP_GAP + 27;
   ctx.font = "9px sans-serif";
   for (const key of LEGEND_ITEMS) {
     const style = SECTION_STYLES[key];

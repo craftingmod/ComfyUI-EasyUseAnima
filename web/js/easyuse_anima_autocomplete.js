@@ -348,10 +348,10 @@ function caretClientRect(input) {
     return rect;
   }
   return {
-    left: markerRect.left - (input.scrollLeft || 0),
-    right: markerRect.right - (input.scrollLeft || 0),
-    top: markerRect.top - (input.scrollTop || 0),
-    bottom: markerRect.bottom - (input.scrollTop || 0),
+    left: markerRect.left,
+    right: markerRect.right,
+    top: markerRect.top,
+    bottom: markerRect.bottom,
     width: markerRect.width,
     height: markerRect.height || Number.parseFloat(getComputedStyle(input).lineHeight) || 18,
   };
@@ -364,12 +364,13 @@ function positionPopup(input) {
   const width = Math.max(260, Math.min(380, inputRect.width, window.innerWidth - 8));
   const left = Math.min(window.innerWidth - width - 4, Math.max(4, caretRect.left));
   const lineHeight = Math.max(14, caretRect.height || Number.parseFloat(getComputedStyle(input).lineHeight) || 18);
-  const below = caretRect.bottom + lineHeight + 4;
-  const above = caretRect.top - 286;
-  const top = below + 80 < window.innerHeight ? below : Math.max(4, above);
+  const visibleCaretBottom = Math.min(inputRect.bottom, Math.max(inputRect.top, caretRect.bottom));
+  const top = Math.max(visibleCaretBottom + 6, caretRect.top + lineHeight + 6);
+  const maxHeight = Math.max(80, window.innerHeight - top - 4);
   menu.style.left = `${left}px`;
   menu.style.top = `${Math.max(4, top)}px`;
   menu.style.width = `${width}px`;
+  menu.style.maxHeight = `${Math.min(280, maxHeight)}px`;
 }
 
 async function search(query, artistOnly = false) {
