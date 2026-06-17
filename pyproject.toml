@@ -1,7 +1,7 @@
 [project]
 name = "easyuse-anima"
 description = "NAIA prompt helper nodes for ComfyUI."
-version = "0.2.0"
+version = "0.3.0"
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [

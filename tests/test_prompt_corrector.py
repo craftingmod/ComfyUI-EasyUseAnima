@@ -4,8 +4,9 @@ import json
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
-from nodes import EasyUseAnimaPromptCorrector
+from nodes import EasyUseAnimaAnimaDexDatasetDownload, EasyUseAnimaPromptCorrector
 
 
 class PromptCorrectorTests(unittest.TestCase):
@@ -85,6 +86,42 @@ class PromptCorrectorTests(unittest.TestCase):
             data["sections"],
             ["count", "character", "copyright", "artist", "unknown"],
         )
+
+
+class AnimaDexDatasetDownloadTests(unittest.TestCase):
+    def test_cached_dataset_does_not_require_token(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            index = root / "index"
+            index.mkdir(parents=True)
+            character_index = index / "character_index.jsonl"
+            artist_index = index / "artist_index.jsonl"
+            character_index.write_text("", encoding="utf-8")
+            artist_index.write_text("", encoding="utf-8")
+
+            with patch("nodes.PACKAGE_DATA_DIR", root):
+                status, report, char_path, artist_path = (
+                    EasyUseAnimaAnimaDexDatasetDownload().download(
+                        "",
+                        False,
+                        False,
+                    )
+                )
+
+        self.assertEqual(status, "cached")
+        self.assertEqual(char_path, str(character_index))
+        self.assertEqual(artist_path, str(artist_index))
+        self.assertEqual(json.loads(report)["status"], "cached")
+
+    def test_missing_dataset_requires_token(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            with patch("nodes.PACKAGE_DATA_DIR", Path(tmp)):
+                with self.assertRaisesRegex(RuntimeError, "export token is required"):
+                    EasyUseAnimaAnimaDexDatasetDownload().download(
+                        "",
+                        False,
+                        False,
+                    )
 
 
 if __name__ == "__main__":

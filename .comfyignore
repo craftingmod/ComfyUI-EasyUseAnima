@@ -7,3 +7,7 @@ __pycache__/
 tests/
 docs/dev/
 models/animadex/
+__animadex__/import/
+__animadex__/index/
+__animadex__/*.json
+__animadex__/*.token

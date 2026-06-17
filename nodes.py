@@ -3,13 +3,18 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import re
 from typing import Optional
 
 try:
-    from .anima_prompt import correct_prompt, load_knowledge_base
+    from .anima_prompt import AnimaDexDB, AnimaDexImportClient, correct_prompt, load_knowledge_base
+    from .anima_prompt.knowledge import PACKAGE_DATA_DIR
+    from .settings import resolve_animadex_site, resolve_animadex_token
 except ImportError:  # allows simple local import tests outside ComfyUI's package loader
-    from anima_prompt import correct_prompt, load_knowledge_base
+    from anima_prompt import AnimaDexDB, AnimaDexImportClient, correct_prompt, load_knowledge_base
+    from anima_prompt.knowledge import PACKAGE_DATA_DIR
+    from settings import resolve_animadex_site, resolve_animadex_token
 
 logger = logging.getLogger("ComfyUI-EasyUseAnima")
 
@@ -42,6 +47,7 @@ PP_STATE_CHOICES = ["skip", "on", "off"]
 
 _HASH_COMMENT_RE = re.compile(r"^[ \t]*#[^\n]*", re.MULTILINE)
 _MULTI_COMMA_RE = re.compile(r"(\s*,){2,}")
+DEFAULT_ANIMADEX_SITE = "https://animadex.net"
 
 
 def _single_value(value):
@@ -306,6 +312,126 @@ class EasyUseAnimaPromptCorrector:
         return (
             result.text,
             json.dumps(report, ensure_ascii=False, indent=2),
+        )
+
+
+class EasyUseAnimaAnimaDexDatasetDownload:
+    """Download AnimaDex CSV exports into the node pack local dataset store."""
+
+    @classmethod
+    def INPUT_TYPES(cls):
+        return {
+            "required": {
+                "site_override": ("STRING", {
+                    "multiline": False,
+                    "default": "",
+                    "tooltip": "Optional AnimaDex site override. Empty uses the ComfyUI settings value.",
+                }),
+                "force_refresh": ("BOOLEAN", {
+                    "default": False,
+                    "tooltip": "Download again even if local index files already exist.",
+                }),
+                "full_manifest": ("BOOLEAN", {
+                    "default": False,
+                    "tooltip": "Request the full AnimaDex export manifest.",
+                }),
+            }
+        }
+
+    RETURN_TYPES = ("STRING", "STRING", "STRING", "STRING")
+    RETURN_NAMES = ("status", "report", "character_index", "artist_index")
+    FUNCTION = "download"
+    CATEGORY = "EasyUse Anima/Data"
+
+    @classmethod
+    def IS_CHANGED(
+        cls,
+        site_override: str = "",
+        force_refresh=False,
+        full_manifest=False,
+    ):
+        if _as_bool(force_refresh, False):
+            return float("nan")
+        data_dir = PACKAGE_DATA_DIR
+        character_index = data_dir / "index" / "character_index.jsonl"
+        artist_index = data_dir / "index" / "artist_index.jsonl"
+        return _stable_change_key({
+            "mode": "animadex_dataset",
+            "site": resolve_animadex_site(site_override),
+            "full_manifest": _as_bool(full_manifest, False),
+            "character_index_exists": character_index.is_file(),
+            "artist_index_exists": artist_index.is_file(),
+            "character_index_mtime": character_index.stat().st_mtime if character_index.is_file() else 0,
+            "artist_index_mtime": artist_index.stat().st_mtime if artist_index.is_file() else 0,
+        })
+
+    def download(
+        self,
+        site_override: str,
+        force_refresh: bool,
+        full_manifest: bool,
+    ):
+        data_dir = PACKAGE_DATA_DIR
+        import_dir = data_dir / "import"
+        index_dir = data_dir / "index"
+        character_index = index_dir / "character_index.jsonl"
+        artist_index = index_dir / "artist_index.jsonl"
+
+        if (
+            not _as_bool(force_refresh, False)
+            and character_index.is_file()
+            and artist_index.is_file()
+        ):
+            report = {
+                "status": "cached",
+                "data_dir": str(data_dir),
+                "character_index": str(character_index),
+                "artist_index": str(artist_index),
+            }
+            return (
+                "cached",
+                json.dumps(report, ensure_ascii=False, indent=2),
+                str(character_index),
+                str(artist_index),
+            )
+
+        token_value = resolve_animadex_token()
+        if not token_value:
+            token_value = os.environ.get("ANIMADEX_IMPORT_TOKEN", "").strip()
+        if not token_value:
+            raise RuntimeError(
+                "[EasyUse Anima] AnimaDex export token is required for first dataset download. "
+                "Set it in ComfyUI Settings, token_file, or ANIMADEX_IMPORT_TOKEN."
+            )
+
+        import_dir.mkdir(parents=True, exist_ok=True)
+        index_dir.mkdir(parents=True, exist_ok=True)
+
+        client = AnimaDexImportClient(
+            site=resolve_animadex_site(site_override),
+            token=token_value,
+        )
+        result = client.download_required_csvs(data_dir=data_dir, full=_as_bool(full_manifest, False))
+        db = AnimaDexDB.from_csvs(
+            characters_csv=result.characters_csv,
+            artists_csv=result.artists_csv,
+        )
+        character_index, artist_index = db.write_jsonl(index_dir)
+        report = {
+            "status": "downloaded",
+            "data_dir": str(data_dir),
+            "characters_csv": str(result.characters_csv),
+            "artists_csv": str(result.artists_csv),
+            "character_index": str(character_index),
+            "artist_index": str(artist_index),
+            "characters": len(db.characters),
+            "artists": len(db.artists),
+        }
+        return (
+            "downloaded",
+            json.dumps(report, ensure_ascii=False, indent=2),
+            str(character_index),
+            str(artist_index),
         )
 
 

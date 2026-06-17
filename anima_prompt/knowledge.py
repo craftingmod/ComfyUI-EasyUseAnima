@@ -21,6 +21,9 @@ DEFAULT_CHARACTER_INDEX_NAME = "character_index.jsonl"
 DEFAULT_ARTIST_INDEX_NAME = "artist_index.jsonl"
 DEFAULT_ANIMADEX_IMPORT_DIR = Path("models") / "animadex" / "import"
 DEFAULT_ANIMADEX_INDEX_DIR = Path("models") / "animadex" / "index"
+PACKAGE_DATA_DIR = Path(__file__).resolve().parents[1] / "__animadex__"
+PACKAGE_ANIMADEX_IMPORT_DIR = PACKAGE_DATA_DIR / "import"
+PACKAGE_ANIMADEX_INDEX_DIR = PACKAGE_DATA_DIR / "index"
 
 
 class KnowledgeBaseNotFound(FileNotFoundError):
@@ -100,7 +103,10 @@ def load_knowledge_base(
             animadex_character_index,
             ANIMADEX_CHARACTER_INDEX_ENV,
             DEFAULT_CHARACTER_INDEX_NAME,
-            extra_defaults=(DEFAULT_ANIMADEX_INDEX_DIR / DEFAULT_CHARACTER_INDEX_NAME,),
+            extra_defaults=(
+                PACKAGE_ANIMADEX_INDEX_DIR / DEFAULT_CHARACTER_INDEX_NAME,
+                DEFAULT_ANIMADEX_INDEX_DIR / DEFAULT_CHARACTER_INDEX_NAME,
+            ),
         )
     )
     artist_index_path = _first_file(
@@ -108,7 +114,10 @@ def load_knowledge_base(
             animadex_artist_index,
             ANIMADEX_ARTIST_INDEX_ENV,
             DEFAULT_ARTIST_INDEX_NAME,
-            extra_defaults=(DEFAULT_ANIMADEX_INDEX_DIR / DEFAULT_ARTIST_INDEX_NAME,),
+            extra_defaults=(
+                PACKAGE_ANIMADEX_INDEX_DIR / DEFAULT_ARTIST_INDEX_NAME,
+                DEFAULT_ANIMADEX_INDEX_DIR / DEFAULT_ARTIST_INDEX_NAME,
+            ),
         )
     )
     char_csv_path = _first_file(
@@ -116,7 +125,10 @@ def load_knowledge_base(
             animadex_characters_csv,
             ANIMADEX_CHARACTERS_ENV,
             "characters.csv",
-            extra_defaults=(DEFAULT_ANIMADEX_IMPORT_DIR / "characters.csv",),
+            extra_defaults=(
+                PACKAGE_ANIMADEX_IMPORT_DIR / "characters.csv",
+                DEFAULT_ANIMADEX_IMPORT_DIR / "characters.csv",
+            ),
         )
     )
     artist_csv_path = _first_file(
@@ -124,7 +136,10 @@ def load_knowledge_base(
             animadex_artists_csv,
             ANIMADEX_ARTISTS_ENV,
             "artists.csv",
-            extra_defaults=(DEFAULT_ANIMADEX_IMPORT_DIR / "artists.csv",),
+            extra_defaults=(
+                PACKAGE_ANIMADEX_IMPORT_DIR / "artists.csv",
+                DEFAULT_ANIMADEX_IMPORT_DIR / "artists.csv",
+            ),
         )
     )
     if character_index_path or artist_index_path:

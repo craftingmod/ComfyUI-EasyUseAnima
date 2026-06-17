@@ -82,6 +82,10 @@ If explicit paths are empty, the node also checks these environment variables:
 Default local discovery also checks:
 
 ```text
+__animadex__/index/character_index.jsonl
+__animadex__/index/artist_index.jsonl
+__animadex__/import/characters.csv
+__animadex__/import/artists.csv
 models/animadex/index/character_index.jsonl
 models/animadex/index/artist_index.jsonl
 models/animadex/import/characters.csv
@@ -89,6 +93,42 @@ models/animadex/import/artists.csv
 ```
 
 Do not commit downloaded AnimaDex exports or tokens.
+
+### AnimaDex Dataset Download
+
+Category: `EasyUse Anima/Data`
+
+Outputs:
+
+- `status`
+- `report`
+- `character_index`
+- `artist_index`
+
+This node downloads AnimaDex character/artist CSV exports and builds local JSONL
+indexes for `Anima Prompt Corrector`.
+
+Local storage:
+
+```text
+__animadex__/import/characters.csv
+__animadex__/import/artists.csv
+__animadex__/index/character_index.jsonl
+__animadex__/index/artist_index.jsonl
+```
+
+By default, if both index files already exist, the node returns `cached` and
+does not download again. Set `force_refresh=true` to download again.
+
+Token options:
+
+- ComfyUI Settings -> `EasyUse Anima: AnimaDex Export Token`
+- ComfyUI Settings -> `EasyUse Anima: AnimaDex Token File`
+- `ANIMADEX_IMPORT_TOKEN`: environment variable used when no settings token or
+  token file is configured.
+
+Avoid putting a real token directly into workflows. The download node reads the
+token from the ComfyUI settings/API storage, a token file, or the environment.
 
 ## Requirements
 
