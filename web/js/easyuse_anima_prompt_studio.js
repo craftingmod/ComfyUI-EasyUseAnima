@@ -39,6 +39,28 @@ function findWidget(node, name) {
   return node.widgets?.find((widget) => widget.name === name);
 }
 
+function ensureHighlightStyle() {
+  if (document.getElementById("easyuse-anima-highlight-style")) {
+    return;
+  }
+  const style = document.createElement("style");
+  style.id = "easyuse-anima-highlight-style";
+  style.textContent = `
+    .easyuse-anima-highlight-input {
+      color: transparent !important;
+      -webkit-text-fill-color: transparent !important;
+      caret-color: var(--input-text, #ddd) !important;
+      background: transparent !important;
+    }
+    .easyuse-anima-highlight-input::selection {
+      color: transparent !important;
+      -webkit-text-fill-color: transparent !important;
+      background: rgba(37, 99, 235, 0.28) !important;
+    }
+  `;
+  document.head.append(style);
+}
+
 function refreshNodeSize(node) {
   requestAnimationFrame(() => {
     const size = node.computeSize();
@@ -149,7 +171,6 @@ function tokenStyle(token) {
   return [
     `color: ${style.color}`,
     `background: ${style.background}`,
-    `font-weight: ${style.weight}`,
     `opacity: ${opacity}`,
     "border-radius: 3px",
   ].join("; ");
@@ -262,7 +283,8 @@ function ensureHighlightOverlay(input) {
     "margin: 0",
     "overflow: hidden",
     "white-space: pre-wrap",
-    "word-break: break-word",
+    "overflow-wrap: break-word",
+    "word-break: normal",
     "pointer-events: none",
     "z-index: 0",
     "background: rgba(15, 23, 42, 0.62)",
@@ -271,6 +293,8 @@ function ensureHighlightOverlay(input) {
   copyInputTextMetrics(input, overlay);
   parent.insertBefore(overlay, input);
 
+  ensureHighlightStyle();
+  input.classList.add("easyuse-anima-highlight-input");
   input.style.position = input.style.position || "relative";
   input.style.zIndex = "1";
   input.style.background = "transparent";
