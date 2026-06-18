@@ -12,15 +12,20 @@ const WIDGET_INDEX = {
   profileData: 5,
 };
 const MIN_NODE_WIDTH = 460;
+const LORA_ROW_HEIGHT = 28;
+const LORA_STRENGTH_STEP = 0.05;
 let loraManagerModulesPromise = null;
 
 async function loadLoraManagerModules() {
   if (!loraManagerModulesPromise) {
-    loraManagerModulesPromise = import("../../comfyui-lora-manager/autocomplete.js")
-    .then((autocompleteModule) => ({
+    loraManagerModulesPromise = Promise.all([
+      import("../../comfyui-lora-manager/autocomplete.js"),
+      import("../../comfyui-lora-manager/preview_tooltip.js"),
+    ]).then(([autocompleteModule, previewModule]) => ({
       AutoComplete: autocompleteModule.AutoComplete,
+      PreviewTooltip: previewModule.PreviewTooltip,
     })).catch((error) => {
-      console.warn("EasyUse Anima: LoraManager autocomplete is unavailable.", error);
+      console.warn("EasyUse Anima: LoraManager UI is unavailable.", error);
       return null;
     });
   }
@@ -180,6 +185,7 @@ function setLorasWidgetValue(node, loras) {
   const value = Array.isArray(loras) ? loras : [];
   widget.value = value;
   widget.callback?.(value);
+  renderLoraRows(node);
 }
 
 function parseLoraSyntaxText(text) {
@@ -473,6 +479,7 @@ function detachInternalWidget(node, name) {
 function finalizeInternalWidgets(node) {
   detachInternalWidget(node, "profile_data");
   detachInternalWidget(node, "profile_count");
+  detachInternalWidget(node, "loras");
 }
 
 function enforceNodeLayout(node) {
@@ -494,6 +501,371 @@ function ensureLoraStackInput(node) {
   if (!node.inputs?.some((input) => input.name === "lora_stack")) {
     node.addInput?.("lora_stack", "LORA_STACK");
   }
+}
+
+function roundStrength(value) {
+  return Math.round(Number(value || 0) * 100) / 100;
+}
+
+function formatStrength(value) {
+  return roundStrength(value).toFixed(2);
+}
+
+function mutateLoras(node, mutator) {
+  const loras = lorasWidgetValue(node).map((lora) => ({ ...lora }));
+  mutator(loras);
+  setLorasWidgetValue(node, loras);
+  saveCurrentProfile(node);
+}
+
+function addLoraEntry(node, entry) {
+  if (!entry?.name) {
+    return;
+  }
+  mutateLoras(node, (loras) => {
+    const existing = loras.find((lora) => lora.name === entry.name);
+    if (existing) {
+      existing.strength = entry.strength;
+      existing.clipStrength = entry.clipStrength;
+      existing.active = entry.active;
+      return;
+    }
+    loras.push(entry);
+  });
+}
+
+function updateLoraEntry(node, index, patch) {
+  mutateLoras(node, (loras) => {
+    const current = loras[index];
+    if (!current) {
+      return;
+    }
+    const oldStrength = Number(current.strength ?? 1);
+    const oldClip = Number(current.clipStrength ?? oldStrength);
+    Object.assign(current, patch);
+    if (Object.prototype.hasOwnProperty.call(patch, "strength") && Math.abs(oldClip - oldStrength) < 0.0001) {
+      current.clipStrength = patch.strength;
+    }
+  });
+}
+
+function removeLoraEntry(node, index) {
+  mutateLoras(node, (loras) => {
+    loras.splice(index, 1);
+  });
+}
+
+function parsePickerInput(value) {
+  const parsed = parseLoraSyntaxText(value);
+  if (parsed.length) {
+    return parsed[0];
+  }
+  const name = String(value || "").trim();
+  if (!name) {
+    return null;
+  }
+  return {
+    name,
+    strength: 1,
+    clipStrength: 1,
+    active: true,
+  };
+}
+
+async function openLoraPicker(node, onChoose, initialValue = "") {
+  const modules = await loadLoraManagerModules();
+  if (!modules?.AutoComplete) {
+    const fallback = window.prompt("LoRA name", initialValue);
+    if (fallback != null) {
+      onChoose(parsePickerInput(fallback));
+    }
+    return;
+  }
+
+  const overlay = document.createElement("div");
+  overlay.style.cssText = [
+    "position: fixed",
+    "inset: 0",
+    "z-index: 10000",
+    "background: rgba(0, 0, 0, 0.32)",
+    "display: flex",
+    "align-items: flex-start",
+    "justify-content: center",
+    "padding-top: 12vh",
+  ].join(";");
+
+  const panel = document.createElement("div");
+  panel.style.cssText = [
+    "width: min(560px, calc(100vw - 48px))",
+    "background: #202020",
+    "border: 1px solid #555",
+    "border-radius: 6px",
+    "box-shadow: 0 12px 30px rgba(0, 0, 0, 0.45)",
+    "padding: 12px",
+    "color: #ddd",
+  ].join(";");
+
+  const title = document.createElement("div");
+  title.textContent = "Add LoRA";
+  title.style.cssText = "font-weight: 700; margin-bottom: 8px;";
+
+  const input = document.createElement("textarea");
+  input.value = initialValue;
+  input.placeholder = "Type LoRA name, then use LoRA Manager autocomplete preview.";
+  input.rows = 3;
+  input.style.cssText = [
+    "box-sizing: border-box",
+    "width: 100%",
+    "min-height: 72px",
+    "resize: vertical",
+    "background: #111",
+    "color: #ddd",
+    "border: 1px solid #555",
+    "border-radius: 4px",
+    "padding: 7px",
+  ].join(";");
+
+  const controls = document.createElement("div");
+  controls.style.cssText = "display: flex; gap: 8px; justify-content: flex-end; margin-top: 10px;";
+
+  const addButton = document.createElement("button");
+  addButton.textContent = "Add";
+  addButton.style.cssText = "padding: 5px 12px; cursor: pointer;";
+
+  const cancelButton = document.createElement("button");
+  cancelButton.textContent = "Cancel";
+  cancelButton.style.cssText = "padding: 5px 12px; cursor: pointer;";
+
+  const close = () => {
+    autocomplete?.cleanup?.();
+    overlay.remove();
+    app.graph?.setDirtyCanvas?.(true, true);
+  };
+
+  addButton.onclick = () => {
+    const entry = parsePickerInput(input.value);
+    if (entry) {
+      onChoose(entry);
+    }
+    close();
+  };
+  cancelButton.onclick = close;
+  overlay.addEventListener("mousedown", (event) => {
+    if (event.target === overlay) {
+      close();
+    }
+  });
+  input.addEventListener("keydown", (event) => {
+    if (event.key === "Escape") {
+      event.preventDefault();
+      close();
+    }
+    if (event.key === "Enter" && event.ctrlKey) {
+      event.preventDefault();
+      addButton.click();
+    }
+  });
+
+  controls.append(addButton, cancelButton);
+  panel.append(title, input, controls);
+  overlay.append(panel);
+  document.body.append(overlay);
+
+  const autocomplete = new modules.AutoComplete(input, "loras", {
+    minChars: 1,
+    maxItems: 80,
+    pageSize: 30,
+    visibleItems: 10,
+    showPreview: true,
+  });
+  input.focus();
+  input.setSelectionRange(input.value.length, input.value.length);
+  input.dispatchEvent(new Event("input", { bubbles: true }));
+}
+
+async function showLoraPreview(node, name, event) {
+  const modules = await loadLoraManagerModules();
+  if (!modules?.PreviewTooltip || !name) {
+    return;
+  }
+  if (!node.__easyuseAnimaLoraPreviewTooltip) {
+    node.__easyuseAnimaLoraPreviewTooltip = new modules.PreviewTooltip({ modelType: "loras" });
+  }
+  const x = Number(event?.clientX || window.innerWidth / 2) + 18;
+  const y = Number(event?.clientY || window.innerHeight / 2) + 18;
+  node.__easyuseAnimaLoraPreviewTooltip.show(name, x, y, true);
+}
+
+function fitCanvasText(ctx, text, maxWidth) {
+  const value = String(text || "");
+  if (ctx.measureText(value).width <= maxWidth) {
+    return value;
+  }
+  let result = value;
+  while (result.length > 1 && ctx.measureText(`${result}...`).width > maxWidth) {
+    result = result.slice(0, -1);
+  }
+  return `${result}...`;
+}
+
+function roundedRect(ctx, x, y, width, height, radius) {
+  if (typeof ctx.roundRect === "function") {
+    ctx.roundRect(x, y, width, height, radius);
+    return;
+  }
+  const r = Math.min(radius, width / 2, height / 2);
+  ctx.moveTo(x + r, y);
+  ctx.lineTo(x + width - r, y);
+  ctx.quadraticCurveTo(x + width, y, x + width, y + r);
+  ctx.lineTo(x + width, y + height - r);
+  ctx.quadraticCurveTo(x + width, y + height, x + width - r, y + height);
+  ctx.lineTo(x + r, y + height);
+  ctx.quadraticCurveTo(x, y + height, x, y + height - r);
+  ctx.lineTo(x, y + r);
+  ctx.quadraticCurveTo(x, y, x + r, y);
+}
+
+class EasyUseAnimaLoraRowWidget {
+  constructor(index) {
+    this.name = `easyuse_anima_lora_${index}`;
+    this.type = "custom";
+    this.options = { serialize: false };
+    this.serialize = false;
+    this.index = index;
+    this.__easyuseAnimaLoraRowWidget = true;
+    this.hitAreas = {};
+  }
+
+  computeSize(width) {
+    return [width, LORA_ROW_HEIGHT];
+  }
+
+  draw(ctx, node, width, y, height) {
+    const lora = lorasWidgetValue(node)[this.index] || {};
+    const active = lora.active !== false;
+    const margin = 10;
+    const inner = 5;
+    const rowX = margin;
+    const rowW = width - margin * 2;
+    const midY = y + height / 2;
+    const right = width - margin;
+    const deleteW = 22;
+    const previewW = 24;
+    const incW = 20;
+    const valueW = 50;
+    const decW = 20;
+    const toggleW = 18;
+
+    this.hitAreas = {
+      toggle: [rowX + inner, y + 5, toggleW, height - 10],
+      delete: [right - deleteW, y + 4, deleteW, height - 8],
+      preview: [right - deleteW - inner - previewW, y + 4, previewW, height - 8],
+      inc: [right - deleteW - inner - previewW - inner - incW, y + 4, incW, height - 8],
+      value: [right - deleteW - inner - previewW - inner - incW - valueW, y + 4, valueW, height - 8],
+      dec: [right - deleteW - inner - previewW - inner - incW - valueW - decW, y + 4, decW, height - 8],
+    };
+    const nameX = this.hitAreas.toggle[0] + toggleW + inner * 2;
+    const nameW = this.hitAreas.dec[0] - nameX - inner;
+    this.hitAreas.name = [nameX, y + 4, Math.max(40, nameW), height - 8];
+
+    ctx.save();
+    ctx.globalAlpha = active ? 1 : 0.45;
+    ctx.fillStyle = "rgba(60, 72, 92, 0.55)";
+    ctx.strokeStyle = "rgba(120, 132, 155, 0.45)";
+    ctx.beginPath();
+    roundedRect(ctx, rowX, y + 2, rowW, height - 4, 5);
+    ctx.fill();
+    ctx.stroke();
+
+    ctx.fillStyle = active ? "#4aa3df" : "#555";
+    ctx.beginPath();
+    roundedRect(ctx, ...this.hitAreas.toggle, 4);
+    ctx.fill();
+
+    ctx.fillStyle = LiteGraph.WIDGET_TEXT_COLOR;
+    ctx.textAlign = "left";
+    ctx.textBaseline = "middle";
+    ctx.fillText(fitCanvasText(ctx, lora.name || "None", nameW), nameX, midY);
+
+    ctx.textAlign = "center";
+    ctx.fillText("<", this.hitAreas.dec[0] + decW / 2, midY);
+    ctx.fillText(formatStrength(lora.strength ?? 1), this.hitAreas.value[0] + valueW / 2, midY);
+    ctx.fillText(">", this.hitAreas.inc[0] + incW / 2, midY);
+    ctx.fillText("i", this.hitAreas.preview[0] + previewW / 2, midY);
+    ctx.fillText("x", this.hitAreas.delete[0] + deleteW / 2, midY);
+    ctx.restore();
+  }
+
+  contains(pos, area) {
+    const hit = this.hitAreas[area];
+    return !!hit
+      && pos[0] >= hit[0]
+      && pos[0] <= hit[0] + hit[2]
+      && pos[1] >= hit[1]
+      && pos[1] <= hit[1] + hit[3];
+  }
+
+  mouse(event, pos, node) {
+    if (event.type !== "pointerdown") {
+      return false;
+    }
+    const lora = lorasWidgetValue(node)[this.index];
+    if (!lora) {
+      return false;
+    }
+    if (this.contains(pos, "toggle")) {
+      updateLoraEntry(node, this.index, { active: lora.active === false });
+      return true;
+    }
+    if (this.contains(pos, "delete")) {
+      removeLoraEntry(node, this.index);
+      return true;
+    }
+    if (this.contains(pos, "preview")) {
+      showLoraPreview(node, lora.name, event);
+      return true;
+    }
+    if (this.contains(pos, "dec")) {
+      updateLoraEntry(node, this.index, { strength: roundStrength((lora.strength ?? 1) - LORA_STRENGTH_STEP) });
+      return true;
+    }
+    if (this.contains(pos, "inc")) {
+      updateLoraEntry(node, this.index, { strength: roundStrength((lora.strength ?? 1) + LORA_STRENGTH_STEP) });
+      return true;
+    }
+    if (this.contains(pos, "value")) {
+      app.canvas.prompt("LoRA strength", lora.strength ?? 1, (value) => {
+        const next = Number(value);
+        if (Number.isFinite(next)) {
+          updateLoraEntry(node, this.index, { strength: roundStrength(next) });
+        }
+      }, event);
+      return true;
+    }
+    if (this.contains(pos, "name")) {
+      openLoraPicker(node, (entry) => {
+        updateLoraEntry(node, this.index, entry);
+      }, `<lora:${lora.name || ""}:${formatStrength(lora.strength ?? 1)}>`);
+      return true;
+    }
+    return false;
+  }
+}
+
+function renderLoraRows(node) {
+  if (!node.widgets) {
+    return;
+  }
+  node.widgets = node.widgets.filter((widget) => !widget.__easyuseAnimaLoraRowWidget);
+  const addButton = node.__easyuseAnimaAddLoraButton;
+  const addIndex = addButton ? node.widgets.indexOf(addButton) : -1;
+  const rows = lorasWidgetValue(node).map((_, index) => new EasyUseAnimaLoraRowWidget(index));
+  if (addIndex >= 0) {
+    node.widgets.splice(addIndex, 0, ...rows);
+  } else {
+    node.widgets.push(...rows);
+  }
+  enforceNodeLayout(node);
 }
 
 function profileOptions(node) {
@@ -575,7 +947,13 @@ function ensureTabsWidget(node) {
     node.widgets = node.widgets.filter((widget) => !widget.__easyuseAnimaControlWidget);
     node.widgets.splice(lorasIndex, 0, ...controls);
   }
+  const addLoraButton = node.addWidget("button", "add_lora", "Add LoRA", (event) => {
+    openLoraPicker(node, (entry) => addLoraEntry(node, entry));
+  });
+  addLoraButton.serialize = false;
+  node.__easyuseAnimaAddLoraButton = addLoraButton;
   renderTabs(node);
+  renderLoraRows(node);
 }
 
 function wrapWidgetCallback(node, name, callback) {
