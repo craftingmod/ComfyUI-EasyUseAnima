@@ -540,6 +540,13 @@ function enforceNodeLayout(node) {
   node.setDirtyCanvas?.(true, true);
 }
 
+function nodeWidgetWidth(node, fallbackWidth) {
+  return Math.max(
+    MIN_NODE_WIDTH,
+    Number(node?.size?.[0]) || Number(fallbackWidth) || MIN_NODE_WIDTH,
+  );
+}
+
 function ensureLoraStackInput(node) {
   if (!node.inputs?.some((input) => input.name === "lora_stack")) {
     node.addInput?.("lora_stack", "LORA_STACK");
@@ -794,11 +801,12 @@ class ProfileBarWidget {
     this.hitAreas = [];
   }
 
-  computeSize(width) {
-    return [width, PROFILE_BAR_HEIGHT];
+  computeSize() {
+    return [MIN_NODE_WIDTH, PROFILE_BAR_HEIGHT];
   }
 
   draw(ctx, node, width, y) {
+    const drawWidth = nodeWidgetWidth(node, width);
     this.hitAreas = [];
     const active = activeProfileIndex(node);
     const count = profileCount(node);
@@ -813,7 +821,7 @@ class ProfileBarWidget {
     ctx.textBaseline = "middle";
 
     const drawButton = (id, label, buttonW, selected = false, disabled = false) => {
-      if (x + buttonW > width - 8) {
+      if (x + buttonW > drawWidth - 8) {
         return;
       }
       this.hitAreas.push([x, buttonY, buttonW, buttonH, id, disabled]);
@@ -872,11 +880,12 @@ class LoraHeaderWidget {
     this.toggleArea = null;
   }
 
-  computeSize(width) {
-    return [width, LORA_HEADER_HEIGHT];
+  computeSize() {
+    return [MIN_NODE_WIDTH, LORA_HEADER_HEIGHT];
   }
 
   draw(ctx, node, width, y, height) {
+    const drawWidth = nodeWidgetWidth(node, width);
     const loras = lorasWidgetValue(node);
     if (!loras.length) {
       return;
@@ -892,7 +901,7 @@ class LoraHeaderWidget {
     ctx.textBaseline = "middle";
     ctx.fillText("Toggle All", margin + this.toggleArea[2] + 4, midY);
     ctx.textAlign = "center";
-    ctx.fillText("Strength", width - margin - 28, midY);
+    ctx.fillText("Strength", drawWidth - margin - 28, midY);
     ctx.restore();
   }
 
@@ -923,11 +932,12 @@ class LoraRowWidget {
     this.moved = false;
   }
 
-  computeSize(width) {
-    return [width, LORA_ROW_HEIGHT];
+  computeSize() {
+    return [MIN_NODE_WIDTH, LORA_ROW_HEIGHT];
   }
 
   draw(ctx, node, width, y, height) {
+    const drawWidth = nodeWidgetWidth(node, width);
     const lora = normalizeLoraEntry(lorasWidgetValue(node)[this.index]);
     if (!lora.name) {
       return;
@@ -935,7 +945,7 @@ class LoraRowWidget {
     const margin = 10;
     const inner = 4;
     const rowX = margin;
-    const rowW = width - margin * 2;
+    const rowW = Math.max(0, drawWidth - margin * 2);
     const rowH = height - 4;
     const rowY = y + 2;
     const midY = y + height / 2;
@@ -1079,15 +1089,16 @@ class AddLoraWidget {
     this.hitArea = null;
   }
 
-  computeSize(width) {
-    return [width, LORA_ADD_HEIGHT];
+  computeSize() {
+    return [MIN_NODE_WIDTH, LORA_ADD_HEIGHT];
   }
 
   draw(ctx, node, width, y, height) {
+    const drawWidth = nodeWidgetWidth(node, width);
     const margin = 15;
     const buttonY = y + 5;
     const buttonH = height - 10;
-    this.hitArea = [margin, buttonY, width - margin * 2, buttonH];
+    this.hitArea = [margin, buttonY, Math.max(0, drawWidth - margin * 2), buttonH];
     ctx.save();
     ctx.fillStyle = LiteGraph.WIDGET_BGCOLOR;
     ctx.strokeStyle = LiteGraph.WIDGET_OUTLINE_COLOR;
@@ -1098,7 +1109,7 @@ class AddLoraWidget {
     ctx.fillStyle = LiteGraph.WIDGET_TEXT_COLOR;
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
-    ctx.fillText("+ Add LoRA", width / 2, buttonY + buttonH / 2);
+    ctx.fillText("+ Add LoRA", drawWidth / 2, buttonY + buttonH / 2);
     ctx.restore();
   }
 
