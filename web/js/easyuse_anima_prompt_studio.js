@@ -79,6 +79,14 @@ const ADVANCED_CONTROL_WIDGETS = [
     title: "Keep positive artist/trigger fields at the front.",
   },
 ];
+const ADVANCED_WIDGET_INDEX = {
+  use_naia: 0,
+  consume_naia_on_queue: 1,
+  use_anima_mod_guidance: 2,
+  pin_trigger_tags_to_front: 3,
+  advanced_fields: 4,
+};
+const ADVANCED_FIELDS_PROPERTY = "easyuse_anima_advanced_fields";
 const ADVANCED_FIELD_TYPES = ["quality", "artist", "general", "naia"];
 const ADVANCED_FIELD_LABELS = {
   quality: "Quality Tags",
@@ -1007,6 +1015,27 @@ function advancedWidget(node) {
   return findWidget(node, "advanced_fields");
 }
 
+function advancedFieldsBackup(node) {
+  const value = node?.properties?.[ADVANCED_FIELDS_PROPERTY];
+  return typeof value === "string" && value.trim() ? value : "";
+}
+
+function syncAdvancedFieldsBackup(node, value) {
+  node.properties ||= {};
+  node.properties[ADVANCED_FIELDS_PROPERTY] = String(value || "");
+}
+
+function ensureAdvancedWidgetValue(node) {
+  const widget = advancedWidget(node);
+  if (!widget) {
+    return;
+  }
+  const backup = advancedFieldsBackup(node);
+  if (backup && (!widget.value || String(widget.value).trim() === "")) {
+    widget.value = backup;
+  }
+}
+
 function hideAdvancedInternalWidget(node, name) {
   const widget = findWidget(node, name);
   if (!widget || widget.__easyuseAnimaAdvancedHidden) {
@@ -1045,9 +1074,11 @@ function normalizeAdvancedField(field, index = 0) {
 }
 
 function parseAdvancedFields(node) {
+  ensureAdvancedWidgetValue(node);
   const widget = advancedWidget(node);
+  const sourceValue = String(widget?.value || advancedFieldsBackup(node) || "[]");
   try {
-    const parsed = JSON.parse(String(widget?.value || "[]"));
+    const parsed = JSON.parse(sourceValue);
     if (Array.isArray(parsed) && parsed.length) {
       const fields = [];
       let seenNaia = false;
@@ -1076,6 +1107,7 @@ function writeAdvancedFields(node, fields, { render = false } = {}) {
     return;
   }
   widget.value = JSON.stringify(fields.map((field, index) => normalizeAdvancedField(field, index)));
+  syncAdvancedFieldsBackup(node, widget.value);
   node.__easyuseAnimaAdvancedFields = fields;
   node.setDirtyCanvas?.(true, true);
   app.graph?.setDirtyCanvas?.(true, true);
@@ -1481,6 +1513,7 @@ function renderAdvancedEditor(node) {
 
 function hookAdvancedNode(node) {
   ensureAdvancedStyle();
+  ensureAdvancedWidgetValue(node);
   hideAdvancedInternalWidget(node, "advanced_fields");
   hideAdvancedControlWidgets(node);
   node.serialize_widgets = true;
@@ -1503,9 +1536,22 @@ function syncAdvancedValues(node, serialized = null) {
   if (!serialized || !Array.isArray(node.widgets) || !Array.isArray(serialized.widgets_values)) {
     return;
   }
-  const index = node.widgets.findIndex((widget) => widget?.name === "advanced_fields");
-  if (index >= 0) {
-    serialized.widgets_values[index] = advancedWidget(node)?.value || JSON.stringify(fields);
+  const fieldsValue = advancedWidget(node)?.value || JSON.stringify(fields);
+  syncAdvancedFieldsBackup(node, fieldsValue);
+  serialized.properties ||= {};
+  serialized.properties[ADVANCED_FIELDS_PROPERTY] = fieldsValue;
+
+  for (const name of Object.keys(ADVANCED_WIDGET_INDEX)) {
+    const index = ADVANCED_WIDGET_INDEX[name];
+    const widget = findWidget(node, name);
+    while (serialized.widgets_values.length <= index) {
+      serialized.widgets_values.push(null);
+    }
+    if (name === "advanced_fields") {
+      serialized.widgets_values[index] = fieldsValue;
+    } else if (widget) {
+      serialized.widgets_values[index] = widget.value;
+    }
   }
 }
 
@@ -1517,6 +1563,7 @@ function applyAdvancedExecutedInputs(node, message) {
   const widget = advancedWidget(node);
   if (widget && payload.advanced_fields != null) {
     widget.value = String(payload.advanced_fields);
+    syncAdvancedFieldsBackup(node, widget.value);
   }
   const useNaia = findWidget(node, "use_naia");
   if (useNaia && payload.use_naia != null) {
