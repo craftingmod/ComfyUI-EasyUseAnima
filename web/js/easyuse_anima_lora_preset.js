@@ -23,6 +23,7 @@ const STRENGTH_STEP = 0.05;
 const PREVIEW_SIZE = 360;
 const missingPreviewNames = new Set();
 let activeLoraMenuNode = null;
+let profileWheelListenerInstalled = false;
 const LORA_PRESET_SETTINGS = {
   nameDisplay: "name",
 };
@@ -1598,8 +1599,20 @@ function refreshLoraPresetNodes() {
 }
 
 function scrollProfileListFromWheel(event) {
+  const canvas = app.canvas?.canvas;
+  const rect = canvas?.getBoundingClientRect?.();
+  if (
+    !canvas
+    || !rect
+    || Number(event?.clientX || 0) < rect.left
+    || Number(event?.clientX || 0) > rect.right
+    || Number(event?.clientY || 0) < rect.top
+    || Number(event?.clientY || 0) > rect.bottom
+  ) {
+    return false;
+  }
   const graphPoint = clientPointToCanvas(event);
-  const nodes = app.graph?._nodes || [];
+  const nodes = [...(app.graph?._nodes || [])].reverse();
   for (const node of nodes) {
     if (node?.comfyClass !== NODE_TYPE || !node.__easyuseAnimaProfileBar || !Array.isArray(node.pos)) {
       continue;
@@ -1628,6 +1641,14 @@ function scrollProfileListFromWheel(event) {
     return true;
   }
   return false;
+}
+
+function installProfileWheelListener() {
+  if (profileWheelListenerInstalled) {
+    return;
+  }
+  profileWheelListenerInstalled = true;
+  document.addEventListener("wheel", scrollProfileListFromWheel, { capture: true, passive: false });
 }
 
 function initializeNode(node) {
@@ -1713,7 +1734,7 @@ app.registerExtension({
       refreshLoraPresetNodes();
     });
     document.addEventListener("pointerdown", hidePreview, true);
-    app.canvas?.canvas?.addEventListener("wheel", scrollProfileListFromWheel, { capture: true, passive: false });
+    installProfileWheelListener();
 
     document.head.appendChild(createEl("style", {
       textContent: `
