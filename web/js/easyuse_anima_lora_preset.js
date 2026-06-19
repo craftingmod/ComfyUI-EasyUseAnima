@@ -438,12 +438,17 @@ function deleteProfile(node, index) {
   node.setDirtyCanvas?.(true, true);
 }
 
-function profilePayload(node) {
+function selectedProfilePayload(node) {
   saveCurrentProfile(node);
+  const index = activeProfileIndex(node);
+  const data = parseProfileData(findWidget(node, "profile_data"));
+  const profile = profileContent(data[profileKey(index)]);
   return {
-    profile_count: profileCount(node),
-    profile_index: activeProfileIndex(node),
-    profile_data: parseProfileData(findWidget(node, "profile_data")),
+    profile_count: 1,
+    profile_index: 1,
+    profile_data: {
+      "1": profile,
+    },
   };
 }
 
@@ -461,7 +466,7 @@ function profileSaveStatus(node, index) {
   };
 }
 
-function markProfilesSaved(node, name) {
+function markSelectedProfileSaved(node, name) {
   const savedName = String(name || "").trim();
   if (!savedName) {
     return;
@@ -469,16 +474,13 @@ function markProfilesSaved(node, name) {
   saveCurrentProfile(node);
   const dataWidget = findWidget(node, "profile_data");
   const data = parseProfileData(dataWidget);
-  const count = profileCount(node);
-  for (let index = 1; index <= count; index += 1) {
-    const key = profileKey(index);
-    const content = profileContent(data[key]);
-    data[key] = {
-      ...content,
-      saved_name: savedName,
-      saved_snapshot: profileSnapshot(content),
-    };
-  }
+  const key = profileKey(activeProfileIndex(node));
+  const content = profileContent(data[key]);
+  data[key] = {
+    ...content,
+    saved_name: savedName,
+    saved_snapshot: profileSnapshot(content),
+  };
   writeProfileData(dataWidget, data);
   loadProfile(node, activeProfileIndex(node));
 }
@@ -556,10 +558,10 @@ async function saveProfileSet(node) {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         name: trimmedName,
-        ...profilePayload(node),
+        ...selectedProfilePayload(node),
       }),
     });
-    markProfilesSaved(node, data?.profile?.name || trimmedName);
+    markSelectedProfileSaved(node, data?.profile?.name || trimmedName);
     renderProfileBar(node);
     node.setDirtyCanvas?.(true, true);
   } catch (error) {
@@ -815,6 +817,24 @@ function canvasPointToClient(point) {
   return [
     rect.left + (Number(point[0]) + Number(offset[0] || 0)) * scale,
     rect.top + (Number(point[1]) + Number(offset[1] || 0)) * scale,
+  ];
+}
+
+function clientPointToCanvas(event) {
+  const canvas = app.canvas?.canvas;
+  if (app.canvas?.convertEventToCanvasOffset) {
+    return app.canvas.convertEventToCanvasOffset(event);
+  }
+  const rect = canvas?.getBoundingClientRect?.();
+  const ds = app.canvas?.ds;
+  const scale = Number(ds?.scale) || 1;
+  const offset = Array.isArray(ds?.offset) ? ds.offset : [0, 0];
+  if (!rect) {
+    return [0, 0];
+  }
+  return [
+    (Number(event?.clientX || 0) - rect.left) / scale - Number(offset[0] || 0),
+    (Number(event?.clientY || 0) - rect.top) / scale - Number(offset[1] || 0),
   ];
 }
 
@@ -1577,6 +1597,39 @@ function refreshLoraPresetNodes() {
   }
 }
 
+function scrollProfileListFromWheel(event) {
+  const graphPoint = clientPointToCanvas(event);
+  const nodes = app.graph?._nodes || [];
+  for (const node of nodes) {
+    if (node?.comfyClass !== NODE_TYPE || !node.__easyuseAnimaProfileBar || !Array.isArray(node.pos)) {
+      continue;
+    }
+    const localPos = [
+      Number(graphPoint[0] || 0) - Number(node.pos[0] || 0),
+      Number(graphPoint[1] || 0) - Number(node.pos[1] || 0),
+    ];
+    const bar = node.__easyuseAnimaProfileBar;
+    if (!pointInArea(localPos, bar.listArea)) {
+      continue;
+    }
+    const count = profileCount(node);
+    const maxOffset = Math.max(0, count - PROFILE_VISIBLE_ROWS);
+    if (maxOffset <= 0) {
+      return false;
+    }
+    const direction = Number(event.deltaY || 0) > 0 ? 1 : -1;
+    const nextOffset = Math.max(0, Math.min(maxOffset, (bar.scrollOffset || 0) + direction));
+    if (nextOffset !== bar.scrollOffset) {
+      bar.scrollOffset = nextOffset;
+      node.setDirtyCanvas?.(true, true);
+    }
+    event.preventDefault?.();
+    event.stopPropagation?.();
+    return true;
+  }
+  return false;
+}
+
 function initializeNode(node) {
   if (node.__easyuseAnimaLoraPresetInitialized) {
     return;
@@ -1660,6 +1713,7 @@ app.registerExtension({
       refreshLoraPresetNodes();
     });
     document.addEventListener("pointerdown", hidePreview, true);
+    app.canvas?.canvas?.addEventListener("wheel", scrollProfileListFromWheel, { capture: true, passive: false });
 
     document.head.appendChild(createEl("style", {
       textContent: `
