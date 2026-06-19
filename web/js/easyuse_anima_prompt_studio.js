@@ -672,21 +672,39 @@ function hookStudioNode(node, attempt = 0) {
       const text = displayText(node, widget);
       if (!text.trim()) {
         widget.__easyuseAnimaTokens = [];
+        widget.__easyuseAnimaLastClassifiedText = "";
+        widget.__easyuseAnimaPendingClassifyText = null;
         updateHighlight(node, widget);
+        return;
+      }
+      if (
+        widget.__easyuseAnimaLastClassifiedText === text
+        && Array.isArray(widget.__easyuseAnimaTokens)
+      ) {
+        updateHighlight(node, widget, widget.__easyuseAnimaTokens);
+        return;
+      }
+      if (widget.__easyuseAnimaPendingClassifyText === text) {
         return;
       }
 
       const seq = ++classifySeq;
+      widget.__easyuseAnimaPendingClassifyText = text;
       try {
         const tokens = await classifyPrompt(text);
         if (seq !== classifySeq) {
           return;
         }
+        widget.__easyuseAnimaLastClassifiedText = text;
         widget.__easyuseAnimaTokens = tokens;
         updateHighlight(node, widget, tokens);
       } catch {
         widget.__easyuseAnimaTokens = [];
         updateHighlight(node, widget);
+      } finally {
+        if (widget.__easyuseAnimaPendingClassifyText === text) {
+          widget.__easyuseAnimaPendingClassifyText = null;
+        }
       }
     });
     updateByField.set(fieldName, update);
