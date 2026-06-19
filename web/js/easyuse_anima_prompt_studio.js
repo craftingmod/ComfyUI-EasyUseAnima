@@ -1040,6 +1040,106 @@ function syncAdvancedNodeSize(node) {
   });
 }
 
+function dispatchCanvasMouseEvent(type, sourceEvent, overrides = {}) {
+  const canvas = app.canvas?.canvas;
+  if (!canvas) {
+    return;
+  }
+  const event = new MouseEvent(type, {
+    bubbles: true,
+    cancelable: true,
+    view: window,
+    clientX: sourceEvent.clientX,
+    clientY: sourceEvent.clientY,
+    screenX: sourceEvent.screenX,
+    screenY: sourceEvent.screenY,
+    button: overrides.button ?? sourceEvent.button,
+    buttons: overrides.buttons ?? sourceEvent.buttons,
+    ctrlKey: sourceEvent.ctrlKey,
+    shiftKey: sourceEvent.shiftKey,
+    altKey: sourceEvent.altKey,
+    metaKey: sourceEvent.metaKey,
+  });
+  canvas.dispatchEvent(event);
+}
+
+function isCanvasAreaEvent(event) {
+  const canvas = app.canvas?.canvas;
+  const rect = canvas?.getBoundingClientRect?.();
+  if (!canvas || !rect || event.target === canvas) {
+    return false;
+  }
+  return (
+    event.clientX >= rect.left
+    && event.clientX <= rect.right
+    && event.clientY >= rect.top
+    && event.clientY <= rect.bottom
+  );
+}
+
+function isMiddlePanExcludedTarget(target) {
+  if (!(target instanceof Element)) {
+    return false;
+  }
+  return !!target.closest([
+    ".comfy-menu",
+    ".comfy-modal",
+    ".comfyui-menu",
+    ".comfyui-settings",
+    ".litegraph.litemenu",
+    ".easyuse-anima-autocomplete",
+    ".easyuse-anima-lora-menu",
+  ].join(","));
+}
+
+function shouldForwardMiddlePan(event) {
+  return (
+    event.button === 1
+    && isCanvasAreaEvent(event)
+    && !isMiddlePanExcludedTarget(event.target)
+  );
+}
+
+function startCanvasPanFromDom(event) {
+  if (!shouldForwardMiddlePan(event)) {
+    return false;
+  }
+  event.preventDefault();
+  event.stopPropagation();
+  document.activeElement?.blur?.();
+  dispatchCanvasMouseEvent("mousedown", event, { button: 1, buttons: 4 });
+
+  const move = (moveEvent) => {
+    moveEvent.preventDefault();
+    moveEvent.stopPropagation();
+    dispatchCanvasMouseEvent("mousemove", moveEvent, { button: 1, buttons: 4 });
+  };
+  const stop = (upEvent) => {
+    upEvent.preventDefault();
+    upEvent.stopPropagation();
+    dispatchCanvasMouseEvent("mouseup", upEvent, { button: 1, buttons: 0 });
+    document.removeEventListener("mousemove", move, true);
+    document.removeEventListener("mouseup", stop, true);
+  };
+  document.addEventListener("mousemove", move, true);
+  document.addEventListener("mouseup", stop, true);
+  return true;
+}
+
+function installMiddlePanForwarder() {
+  if (window.__easyuseAnimaMiddlePanForwarderInstalled) {
+    return;
+  }
+  window.__easyuseAnimaMiddlePanForwarderInstalled = true;
+  document.addEventListener("mousedown", startCanvasPanFromDom, true);
+  document.addEventListener("auxclick", (event) => {
+    if (shouldForwardMiddlePan(event)) {
+      event.preventDefault();
+      event.stopPropagation();
+    }
+  }, true);
+}
+
 function createAdvancedFieldElement(node, field) {
   const fields = node.__easyuseAnimaAdvancedFields || parseAdvancedFields(node);
   const globalIndex = fields.findIndex((item) => item.id === field.id);
@@ -1249,6 +1349,7 @@ function applyAdvancedExecutedInputs(node, message) {
 app.registerExtension({
   name: "easyuse-anima.prompt-studio",
   async setup() {
+    installMiddlePanForwarder();
     await loadPromptStudioSettings();
   },
   async beforeRegisterNodeDef(nodeType, nodeData) {
