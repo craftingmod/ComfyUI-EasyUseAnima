@@ -1,5 +1,6 @@
 import json
 import os
+import tempfile
 import unittest
 from unittest.mock import patch
 
@@ -85,6 +86,44 @@ class LoraPresetTests(unittest.TestCase):
         self.assertEqual(result[0], "style")
         self.assertEqual(result[4], 1)
         self.assertEqual(unwrap_ui(response)["profile_index"], 1)
+
+    def test_build_corrects_style_prompt_output(self):
+        with patch("nodes._correct_style_prompt", lambda prompt: f"corrected: {prompt}"):
+            response = EasyUseAnimaLoraPreset().build(
+                style_prompt="@artist, style",
+                profile_index=1,
+                profile_count=1,
+                lora_name="None",
+                loras="[]",
+                profile_data="{}",
+            )
+
+        result = unwrap_result(response)
+        self.assertEqual(result[0], "corrected: @artist, style")
+
+    def test_build_reads_lora_manager_metadata_trigger_words(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            lora_path = os.path.join(temp_dir, "foo.safetensors")
+            metadata_path = os.path.join(temp_dir, "foo.metadata.json")
+            with open(metadata_path, "w", encoding="utf-8") as handle:
+                json.dump({"civitai": {"trainedWords": ["@foo", "@bar"]}}, handle)
+
+            loras = [{"name": "style/foo.safetensors", "on": True, "strength": 1.0}]
+            with (
+                patch("nodes._fallback_lora_path", lambda _name: lora_path),
+                patch("nodes._apply_lora_syntax_format", lambda name: "foo"),
+            ):
+                response = EasyUseAnimaLoraPreset().build(
+                    style_prompt="style",
+                    profile_index=1,
+                    profile_count=1,
+                    lora_name="None",
+                    loras=json.dumps(loras),
+                    profile_data="{}",
+                )
+
+        result = unwrap_result(response)
+        self.assertEqual(result[2], "@foo,, @bar")
 
 
 if __name__ == "__main__":

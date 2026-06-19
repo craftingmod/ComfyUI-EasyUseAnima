@@ -56,6 +56,7 @@ _HASH_COMMENT_RE = re.compile(r"^[ \t]*#[^\n]*", re.MULTILINE)
 _MULTI_COMMA_RE = re.compile(r"(\s*,){2,}")
 _INLINE_SPACE_RE = re.compile(r"[ \t]+")
 _WEIGHTED_TOKEN_RE = re.compile(r"^\(([^(),]+):[-+]?\d+(?:\.\d+)?\)$")
+_TRIGGER_WORD_KEYS = ("trainedWords", "trained_words", "trigger_words", "activation_text")
 class _AnyType(str):
     def __ne__(self, __value: object) -> bool:
         return False
@@ -355,16 +356,105 @@ def _fallback_lora_path(lora_name: str) -> str:
     return lora_name
 
 
+def _dedupe_text_values(values) -> list[str]:
+    seen: set[str] = set()
+    result: list[str] = []
+    for value in values:
+        text = str(value or "").strip()
+        if not text:
+            continue
+        key = text.casefold()
+        if key in seen:
+            continue
+        seen.add(key)
+        result.append(text)
+    return result
+
+
+def _trigger_words_from_value(value) -> list[str]:
+    if isinstance(value, str):
+        return _dedupe_text_values(_prompt_tokens(value))
+    if isinstance(value, dict):
+        for key in ("word", "name", "tag", "text"):
+            if key in value:
+                return _trigger_words_from_value(value.get(key))
+        return []
+    if isinstance(value, (list, tuple, set)):
+        words: list[str] = []
+        for item in value:
+            words.extend(_trigger_words_from_value(item))
+        return _dedupe_text_values(words)
+    return []
+
+
+def _metadata_json_paths_for_lora(lora_path: str) -> list[str]:
+    path = str(lora_path or "").strip()
+    if not path:
+        return []
+    base, _ext = os.path.splitext(path)
+    candidates = [f"{base}.metadata.json", f"{path}.metadata.json"]
+    return _dedupe_text_values(candidates)
+
+
+def _load_lora_manager_metadata(lora_path: str) -> dict:
+    for metadata_path in _metadata_json_paths_for_lora(lora_path):
+        if not os.path.isfile(metadata_path):
+            continue
+        try:
+            with open(metadata_path, "r", encoding="utf-8") as handle:
+                data = json.load(handle)
+        except (OSError, json.JSONDecodeError) as exc:
+            logger.warning("[EasyUse Anima] failed to read LoRA metadata JSON %s: %s", metadata_path, exc)
+            continue
+        if isinstance(data, dict):
+            return data
+    return {}
+
+
+def _lora_manager_trigger_words_from_metadata(metadata: dict) -> list[str]:
+    if not isinstance(metadata, dict):
+        return []
+
+    words: list[str] = []
+    for key in _TRIGGER_WORD_KEYS:
+        words.extend(_trigger_words_from_value(metadata.get(key)))
+
+    civitai = metadata.get("civitai")
+    if isinstance(civitai, dict):
+        for key in _TRIGGER_WORD_KEYS:
+            words.extend(_trigger_words_from_value(civitai.get(key)))
+
+    return _dedupe_text_values(words)
+
+
+def _get_lora_manager_trigger_words(lora_path: str) -> list[str]:
+    return _lora_manager_trigger_words_from_metadata(_load_lora_manager_metadata(lora_path))
+
+
 def _get_lora_info(lora_name: str) -> tuple[str, list[str]]:
+    fallback_path = _fallback_lora_path(lora_name)
+    trigger_words = _get_lora_manager_trigger_words(fallback_path)
+    if trigger_words:
+        return fallback_path, trigger_words
+
     try:
         from py.utils.utils import get_lora_info  # type: ignore
 
         path, trigger_words = get_lora_info(lora_name)
         if not isinstance(trigger_words, list):
             trigger_words = []
-        return str(path), [str(word) for word in trigger_words if str(word).strip()]
+        trigger_words = _dedupe_text_values(trigger_words)
+        if trigger_words:
+            return str(path), trigger_words
+        json_trigger_words = _get_lora_manager_trigger_words(str(path))
+        return str(path), json_trigger_words
     except Exception:
-        return _fallback_lora_path(lora_name), []
+        return fallback_path, []
+
+
+def _correct_style_prompt(prompt: str) -> str:
+    return _correct_builder_prompt(prompt)
+
 
 
 def _format_strength(value: float) -> str:
@@ -753,6 +843,7 @@ class EasyUseAnimaLoraPreset:
             style_prompt,
             kwargs,
         )
+        corrected_style = _correct_style_prompt(selected_style)
 
         stack = []
         trigger_words: list[str] = []
@@ -812,7 +903,7 @@ class EasyUseAnimaLoraPreset:
                 }],
             },
             "result": (
-                str(selected_style or ""),
+                corrected_style,
                 stack,
                 ",, ".join(trigger_words) if trigger_words else "",
                 " ".join(active_loras_text_parts),
