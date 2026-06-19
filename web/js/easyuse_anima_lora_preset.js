@@ -1080,6 +1080,10 @@ class ProfileBarWidget {
     this.hitAreas = [];
     this.scrollOffset = 0;
     this.listArea = null;
+    this.scrollTrackArea = null;
+    this.scrollThumbArea = null;
+    this.scrollDragging = false;
+    this.scrollDragDelta = 0;
   }
 
   computeSize(_width, node) {
@@ -1095,6 +1099,8 @@ class ProfileBarWidget {
     const drawWidth = nodeWidgetWidth(node, width);
     this.hitAreas = [];
     this.listArea = null;
+    this.scrollTrackArea = null;
+    this.scrollThumbArea = null;
     const active = activeProfileIndex(node);
     const count = profileCount(node);
     const maxOffset = Math.max(0, count - PROFILE_VISIBLE_ROWS);
@@ -1145,6 +1151,9 @@ class ProfileBarWidget {
     const listW = Math.max(0, drawWidth - 16);
     const visibleRows = Math.max(1, Math.min(PROFILE_VISIBLE_ROWS, count));
     const listH = visibleRows * PROFILE_ROW_HEIGHT;
+    const hasScrollbar = count > visibleRows;
+    const scrollbarW = hasScrollbar ? 10 : 0;
+    const rowW = Math.max(0, listW - scrollbarW - (hasScrollbar ? 4 : 0));
     this.listArea = [listX, listY, listW, listH];
 
     ctx.save();
@@ -1159,7 +1168,7 @@ class ProfileBarWidget {
       const rowY = listY + row * PROFILE_ROW_HEIGHT;
       const selected = index === active;
       const status = profileSaveStatus(node, index);
-      const rowArea = [listX, rowY + 1, listW, PROFILE_ROW_HEIGHT - 2];
+      const rowArea = [listX, rowY + 1, rowW, PROFILE_ROW_HEIGHT - 2];
       this.hitAreas.push([...rowArea, `profile:${index}`, false]);
       ctx.fillStyle = selected ? "#3f79d8" : "rgba(255,255,255,0.045)";
       ctx.strokeStyle = selected ? "#6fa2ff" : "rgba(255,255,255,0.12)";
@@ -1179,21 +1188,50 @@ class ProfileBarWidget {
       const rightWidth = Math.min(82, Math.max(58, ctx.measureText(rightText).width + 16));
       ctx.textAlign = "left";
       ctx.fillStyle = LiteGraph.WIDGET_TEXT_COLOR;
-      ctx.fillText(fitCanvasText(ctx, leftText, Math.max(20, listW - rightWidth - 18)), listX + 8, rowY + PROFILE_ROW_HEIGHT / 2);
+      ctx.fillText(fitCanvasText(ctx, leftText, Math.max(20, rowW - rightWidth - 18)), listX + 8, rowY + PROFILE_ROW_HEIGHT / 2);
       ctx.textAlign = "right";
       ctx.fillStyle = stateColor;
-      ctx.fillText(rightText, listX + listW - 8, rowY + PROFILE_ROW_HEIGHT / 2);
+      ctx.fillText(rightText, listX + rowW - 8, rowY + PROFILE_ROW_HEIGHT / 2);
     }
     ctx.restore();
 
-    if (count > visibleRows) {
-      const barW = 3;
+    if (hasScrollbar) {
+      const trackW = 8;
+      const trackX = listX + listW - trackW - 1;
+      this.scrollTrackArea = [trackX - 2, listY, trackW + 4, listH];
+      ctx.fillStyle = "rgba(255,255,255,0.08)";
+      ctx.beginPath();
+      roundedRect(ctx, trackX, listY, trackW, listH, 4);
+      ctx.fill();
+
       const barH = Math.max(14, listH * (visibleRows / count));
       const barY = listY + (listH - barH) * (this.scrollOffset / Math.max(1, maxOffset));
-      ctx.fillStyle = "rgba(255,255,255,0.25)";
-      ctx.fillRect(listX + listW - barW - 2, barY, barW, barH);
+      this.scrollThumbArea = [trackX - 2, barY, trackW + 4, barH];
+      ctx.fillStyle = "rgba(255,255,255,0.42)";
+      ctx.beginPath();
+      roundedRect(ctx, trackX, barY, trackW, barH, 4);
+      ctx.fill();
     }
     ctx.restore();
+  }
+
+  scrollToPointer(pos, node) {
+    const count = profileCount(node);
+    const maxOffset = Math.max(0, count - PROFILE_VISIBLE_ROWS);
+    if (maxOffset <= 0 || !this.scrollTrackArea || !this.scrollThumbArea) {
+      return false;
+    }
+    const trackY = this.scrollTrackArea[1];
+    const trackH = this.scrollTrackArea[3];
+    const thumbH = this.scrollThumbArea[3];
+    const range = Math.max(1, trackH - thumbH);
+    const y = Math.max(0, Math.min(range, pos[1] - trackY - this.scrollDragDelta));
+    const nextOffset = Math.round((y / range) * maxOffset);
+    if (nextOffset !== this.scrollOffset) {
+      this.scrollOffset = nextOffset;
+      node.setDirtyCanvas?.(true, true);
+    }
+    return true;
   }
 
   mouse(event, pos, node) {
@@ -1205,8 +1243,26 @@ class ProfileBarWidget {
       node.setDirtyCanvas?.(true, true);
       return true;
     }
+    if (event.type === "pointermove" && this.scrollDragging) {
+      return this.scrollToPointer(pos, node);
+    }
+    if ((event.type === "pointerup" || event.type === "pointercancel" || event.type === "pointerleave") && this.scrollDragging) {
+      this.scrollDragging = false;
+      this.scrollDragDelta = 0;
+      return true;
+    }
     if (event.type !== "pointerdown" || event.button !== 0) {
       return false;
+    }
+    if (pointInArea(pos, this.scrollThumbArea)) {
+      this.scrollDragging = true;
+      this.scrollDragDelta = pos[1] - this.scrollThumbArea[1];
+      return true;
+    }
+    if (pointInArea(pos, this.scrollTrackArea)) {
+      this.scrollDragging = true;
+      this.scrollDragDelta = this.scrollThumbArea ? this.scrollThumbArea[3] / 2 : 0;
+      return this.scrollToPointer(pos, node);
     }
     for (const [x, y, width, height, id, disabled] of this.hitAreas) {
       if (disabled || !pointInArea(pos, [x, y, width, height])) {
