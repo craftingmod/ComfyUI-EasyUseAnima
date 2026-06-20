@@ -1,6 +1,6 @@
 [project]
 name = "easyuse-anima"
-description = "NAIA prompt helper nodes for ComfyUI."
+description = "Prompt editing, ANIMA prompt correction, NAIA prompt integration, and LoRA preset tools for ComfyUI."
 version = "0.1.2"
 readme = "README.md"
 license = { file = "LICENSE" }
