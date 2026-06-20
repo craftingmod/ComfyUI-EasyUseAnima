@@ -889,6 +889,11 @@ function syncOverlayBounds(input, overlay) {
 }
 
 function ensureHighlightOverlay(input) {
+  input.spellcheck = false;
+  input.autocomplete = "off";
+  input.setAttribute("autocorrect", "off");
+  input.setAttribute("autocapitalize", "off");
+
   if (input.__easyuseAnimaHighlightOverlay) {
     syncOverlayBounds(input, input.__easyuseAnimaHighlightOverlay);
     return input.__easyuseAnimaHighlightOverlay;
