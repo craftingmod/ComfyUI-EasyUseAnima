@@ -800,6 +800,35 @@ def _fallback_lora_path(lora_name: str) -> str:
     return lora_name
 
 
+def _lora_stack_name(lora_name: str) -> str:
+    value = str(lora_name or "").strip()
+    if not value:
+        return value
+
+    try:
+        import folder_paths  # type: ignore
+
+        absolute_value = os.path.abspath(value)
+        for root in folder_paths.get_folder_paths("loras"):
+            absolute_root = os.path.abspath(root)
+            try:
+                relative = os.path.relpath(absolute_value, absolute_root)
+            except ValueError:
+                continue
+            if relative == "." or relative.startswith(f"..{os.sep}") or relative == "..":
+                continue
+            return relative.replace("/", os.sep)
+    except Exception:
+        pass
+
+    normalized = value.replace("\\", "/")
+    marker = "/models/loras/"
+    marker_index = normalized.casefold().rfind(marker)
+    if marker_index >= 0:
+        normalized = normalized[marker_index + len(marker):]
+    return normalized.replace("/", os.sep)
+
+
 def _dedupe_text_values(values) -> list[str]:
     seen: set[str] = set()
     result: list[str] = []
@@ -1807,13 +1836,14 @@ class EasyUseAnimaLoraPreset:
             except (TypeError, ValueError):
                 clip_strength = model_strength
 
-            dedupe_key = (lora_name, model_strength, clip_strength)
+            stack_lora_name = _lora_stack_name(lora_name)
+            dedupe_key = (stack_lora_name, model_strength, clip_strength)
             if dedupe_key in seen:
                 continue
             seen.add(dedupe_key)
 
-            lora_path, lora_trigger_words = _get_lora_info(lora_name)
-            stack.append((str(lora_path).replace("/", os.sep), model_strength, clip_strength))
+            _lora_path, lora_trigger_words = _get_lora_info(lora_name)
+            stack.append((stack_lora_name, model_strength, clip_strength))
             trigger_words.extend(lora_trigger_words)
             active_loras.append((active_lora_name, model_strength, clip_strength))
 

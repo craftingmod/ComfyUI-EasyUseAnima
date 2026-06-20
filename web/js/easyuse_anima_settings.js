@@ -73,10 +73,83 @@ const NAIA_PREPROCESSING_OPTIONS = [
   ["tag_implication_compression", "Tag implication compression"],
 ];
 
+const SETTINGS_PANEL_STYLE =
+  "box-sizing: border-box; max-width: 560px; line-height: 1.45; display: flex; flex-direction: column; gap: 8px;";
+const SETTINGS_ROW_STYLE =
+  "display: flex; align-items: center; flex-wrap: wrap; gap: 8px; min-width: 0;";
+const SETTINGS_FIELD_STYLE =
+  "display: flex; flex-direction: column; gap: 4px; min-width: min(100%, 180px);";
+const SETTINGS_INPUT_STYLE =
+  "box-sizing: border-box; width: 100%; min-width: 0; padding: 4px 7px;";
+const SETTINGS_STATUS_STYLE = "opacity: 0.76; font-size: 0.92em;";
+const autoSaveTimers = new Map();
+
+function currentValue(text) {
+  const value = document.createElement("div");
+  value.textContent = text;
+  value.style.cssText = "opacity: 0.68; font-size: 0.9em;";
+  return value;
+}
+
+function statusLine(initialText = "Auto-save enabled") {
+  const status = document.createElement("span");
+  status.textContent = initialText;
+  status.style.cssText = SETTINGS_STATUS_STYLE;
+  return status;
+}
+
+function setStatus(status, text, color = "") {
+  status.textContent = text;
+  status.style.color = color;
+}
+
+function formatOnOff(value) {
+  return value ? "on" : "off";
+}
+
+function updateSettingCache(key, value) {
+  window.__easyuseAnimaSettings ||= {};
+  window.__easyuseAnimaSettings[key] = String(value ?? "");
+}
+
+async function saveSettingAndNotify(key, value, status = null) {
+  try {
+    if (status) {
+      setStatus(status, "Saving...", "#64748b");
+    }
+    const data = await saveSetting(key, value);
+    updateSettingCache(key, value);
+    window.dispatchEvent(new CustomEvent("easyuse-anima-settings-updated", { detail: data }));
+    if (status) {
+      setStatus(status, "Saved automatically", "#16a34a");
+    }
+    return data;
+  } catch (error) {
+    if (status) {
+      setStatus(status, `Save failed: ${error.message || error}`, "#dc2626");
+    }
+    throw error;
+  }
+}
+
+function scheduleSettingSave(key, value, status, delay = 400) {
+  const timerKey = `${key}`;
+  if (autoSaveTimers.has(timerKey)) {
+    clearTimeout(autoSaveTimers.get(timerKey));
+  }
+  autoSaveTimers.set(
+    timerKey,
+    setTimeout(() => {
+      autoSaveTimers.delete(timerKey);
+      saveSettingAndNotify(key, value, status).catch(() => {});
+    }, delay),
+  );
+}
+
 function sectionHeader(title, description) {
   const container = document.createElement("div");
   container.style.cssText =
-    "max-width: 760px; padding: 9px 0 4px; border-top: 1px solid rgba(128, 128, 128, 0.28);";
+    "box-sizing: border-box; max-width: 560px; padding: 10px 0 4px; border-top: 1px solid rgba(128, 128, 128, 0.28);";
 
   const heading = document.createElement("div");
   heading.textContent = title;
@@ -95,12 +168,12 @@ function sectionHeader(title, description) {
 
 function metadataFilterEditor(initialValue = "") {
   const container = document.createElement("div");
-  container.style.cssText = "max-width: 760px; line-height: 1.45;";
+  container.style.cssText = SETTINGS_PANEL_STYLE;
 
   const guide = document.createElement("div");
   guide.textContent =
     "Comma- or newline-separated prompt tags to remove only from Anima Prompt Builder metadata_prompt. The normal prompt output is not filtered.";
-  guide.style.cssText = "margin-bottom: 6px; opacity: 0.78;";
+  guide.style.cssText = "opacity: 0.78;";
   container.append(guide);
 
   const textarea = document.createElement("textarea");
@@ -108,38 +181,27 @@ function metadataFilterEditor(initialValue = "") {
   textarea.placeholder = "best quality\nlowres\nhigh detail";
   textarea.rows = 4;
   textarea.style.cssText =
-    "box-sizing: border-box; width: min(100%, 560px); min-height: 86px; resize: vertical;";
+    "box-sizing: border-box; width: 100%; min-height: 86px; resize: vertical;";
   container.append(textarea);
 
-  const controls = document.createElement("div");
-  controls.style.cssText = "display: flex; align-items: center; gap: 8px; margin-top: 7px;";
-
-  const saveButton = document.createElement("button");
-  saveButton.textContent = "Save Metadata Filter";
-  saveButton.style.cssText = "padding: 5px 10px; cursor: pointer;";
-
+  const current = currentValue("");
   const status = document.createElement("span");
-  status.style.cssText = "opacity: 0.76;";
-
-  saveButton.onclick = async () => {
-    const originalText = saveButton.textContent;
-    try {
-      saveButton.disabled = true;
-      saveButton.textContent = "Saving...";
-      await saveSetting("prompt.metadata_filter_words", textarea.value);
-      status.textContent = "Saved";
-      status.style.color = "#16a34a";
-    } catch (error) {
-      status.textContent = `Save failed: ${error.message || error}`;
-      status.style.color = "#dc2626";
-    } finally {
-      saveButton.disabled = false;
-      saveButton.textContent = originalText;
-    }
+  status.style.cssText = SETTINGS_STATUS_STYLE;
+  const refreshCurrent = () => {
+    const count = textarea.value
+      .split(/[\n,]+/)
+      .map((value) => value.trim())
+      .filter(Boolean)
+      .length;
+    current.textContent = `Current: ${count ? `${count} filter words` : "no filter words"}`;
   };
+  refreshCurrent();
+  textarea.addEventListener("input", () => {
+    refreshCurrent();
+    scheduleSettingSave("prompt.metadata_filter_words", textarea.value, status);
+  });
 
-  controls.append(saveButton, status);
-  container.append(controls);
+  container.append(current, status);
 
   return container;
 }
@@ -155,16 +217,16 @@ function parseColorSettings(value = "") {
 
 function promptStudioEditor(settings = {}) {
   const container = document.createElement("div");
-  container.style.cssText = "max-width: 760px; line-height: 1.45;";
+  container.style.cssText = SETTINGS_PANEL_STYLE;
 
   const guide = document.createElement("div");
   guide.textContent =
     "Controls Prompt Studio tag highlighting. Colors apply to both highlighted prompt text and the color legend.";
-  guide.style.cssText = "margin-bottom: 8px; opacity: 0.78;";
+  guide.style.cssText = "opacity: 0.78;";
   container.append(guide);
 
   const typoRow = document.createElement("label");
-  typoRow.style.cssText = "display: flex; align-items: center; gap: 7px; margin-bottom: 10px;";
+  typoRow.style.cssText = SETTINGS_ROW_STYLE;
   const typoToggle = document.createElement("input");
   typoToggle.type = "checkbox";
   typoToggle.checked = settings["prompt_studio.typo_indicator"] !== "false";
@@ -174,20 +236,21 @@ function promptStudioEditor(settings = {}) {
   container.append(typoRow);
 
   const naiaGeneralRow = document.createElement("label");
-  naiaGeneralRow.style.cssText = "display: flex; align-items: flex-start; gap: 7px; margin-bottom: 10px;";
+  naiaGeneralRow.style.cssText = "display: flex; align-items: flex-start; flex-wrap: wrap; gap: 7px; min-width: 0;";
   const naiaGeneralToggle = document.createElement("input");
   naiaGeneralToggle.type = "checkbox";
   naiaGeneralToggle.checked = settings["prompt_studio.naia_general_above_auto_toggle"] === "true";
   const naiaGeneralText = document.createElement("span");
   naiaGeneralText.textContent =
     "When Advanced NAIA is enabled, disable General fields above the NAIA field and re-enable them when NAIA is disabled";
+  naiaGeneralText.style.cssText = "min-width: min(100%, 280px);";
   naiaGeneralRow.append(naiaGeneralToggle, naiaGeneralText);
   container.append(naiaGeneralRow);
 
   const colors = parseColorSettings(settings["prompt_studio.colors"]);
   const grid = document.createElement("div");
   grid.style.cssText =
-    "display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 6px 12px; max-width: 560px;";
+    "display: grid; grid-template-columns: repeat(auto-fit, minmax(118px, 1fr)); gap: 6px 10px; width: 100%;";
   const colorInputs = new Map();
   for (const [key, item] of Object.entries(PROMPT_STUDIO_COLOR_DEFAULTS)) {
     const label = document.createElement("label");
@@ -205,75 +268,81 @@ function promptStudioEditor(settings = {}) {
   container.append(grid);
 
   const controls = document.createElement("div");
-  controls.style.cssText = "display: flex; align-items: center; gap: 8px; margin-top: 9px; flex-wrap: wrap;";
-
-  const saveButton = document.createElement("button");
-  saveButton.textContent = "Save Prompt Studio";
-  saveButton.style.cssText = "padding: 5px 10px; cursor: pointer;";
+  controls.style.cssText = SETTINGS_ROW_STYLE;
 
   const resetButton = document.createElement("button");
   resetButton.textContent = "Reset Colors";
   resetButton.style.cssText = "padding: 5px 10px; cursor: pointer;";
 
+  const current = currentValue("");
   const status = document.createElement("span");
-  status.style.cssText = "opacity: 0.76;";
+  status.style.cssText = SETTINGS_STATUS_STYLE;
+
+  const collectColors = () => {
+    const colorSettings = {};
+    for (const [key, input] of colorInputs.entries()) {
+      colorSettings[key] = input.value;
+    }
+    return colorSettings;
+  };
+
+  const refreshCurrent = () => {
+    current.textContent =
+      `Current: typo ${formatOnOff(typoToggle.checked)}, ` +
+      `NAIA general auto-toggle ${formatOnOff(naiaGeneralToggle.checked)}`;
+  };
+
+  const saveColors = () => {
+    scheduleSettingSave("prompt_studio.colors", JSON.stringify(collectColors()), status, 200);
+  };
 
   resetButton.onclick = () => {
     for (const [key, input] of colorInputs.entries()) {
       input.value = PROMPT_STUDIO_COLOR_DEFAULTS[key].color;
     }
+    saveColors();
   };
+  typoToggle.addEventListener("change", () => {
+    refreshCurrent();
+    saveSettingAndNotify("prompt_studio.typo_indicator", typoToggle.checked ? "true" : "false", status).catch(() => {});
+  });
+  naiaGeneralToggle.addEventListener("change", () => {
+    refreshCurrent();
+    saveSettingAndNotify(
+      "prompt_studio.naia_general_above_auto_toggle",
+      naiaGeneralToggle.checked ? "true" : "false",
+      status,
+    ).catch(() => {});
+  });
+  for (const input of colorInputs.values()) {
+    input.addEventListener("input", saveColors);
+    input.addEventListener("change", saveColors);
+  }
+  refreshCurrent();
 
-  saveButton.onclick = async () => {
-    const originalText = saveButton.textContent;
-    const colorSettings = {};
-    for (const [key, input] of colorInputs.entries()) {
-      colorSettings[key] = input.value;
-    }
-    try {
-      saveButton.disabled = true;
-      saveButton.textContent = "Saving...";
-      await saveSetting("prompt_studio.typo_indicator", typoToggle.checked ? "true" : "false");
-      await saveSetting(
-        "prompt_studio.naia_general_above_auto_toggle",
-        naiaGeneralToggle.checked ? "true" : "false",
-      );
-      const data = await saveSetting("prompt_studio.colors", JSON.stringify(colorSettings));
-      window.dispatchEvent(new CustomEvent("easyuse-anima-settings-updated", { detail: data }));
-      status.textContent = "Saved.";
-      status.style.color = "#16a34a";
-    } catch (error) {
-      status.textContent = `Save failed: ${error.message || error}`;
-      status.style.color = "#dc2626";
-    } finally {
-      saveButton.disabled = false;
-      saveButton.textContent = originalText;
-    }
-  };
-
-  controls.append(saveButton, resetButton, status);
-  container.append(controls);
+  controls.append(resetButton, status);
+  container.append(current, controls);
   return container;
 }
 
 function loraPresetEditor(settings = {}) {
   const container = document.createElement("div");
-  container.style.cssText = "max-width: 760px; line-height: 1.45;";
+  container.style.cssText = SETTINGS_PANEL_STYLE;
 
   const guide = document.createElement("div");
   guide.textContent = "Controls how LoRA names are displayed inside Anima LoRA Preset rows.";
-  guide.style.cssText = "margin-bottom: 8px; opacity: 0.78;";
+  guide.style.cssText = "opacity: 0.78;";
   container.append(guide);
 
   const row = document.createElement("div");
-  row.style.cssText = "display: flex; align-items: center; flex-wrap: wrap; gap: 8px;";
+  row.style.cssText = SETTINGS_ROW_STYLE;
 
   const label = document.createElement("label");
-  label.style.cssText = "display: flex; align-items: center; gap: 7px;";
+  label.style.cssText = SETTINGS_FIELD_STYLE;
   const text = document.createElement("span");
   text.textContent = "LoRA display";
   const select = document.createElement("select");
-  select.style.cssText = "min-width: 180px; padding: 4px 8px;";
+  select.style.cssText = SETTINGS_INPUT_STYLE;
   for (const [value, labelText] of [
     ["name", "Name only"],
     ["path", "Full path"],
@@ -286,61 +355,49 @@ function loraPresetEditor(settings = {}) {
   }
   label.append(text, select);
 
-  const saveButton = document.createElement("button");
-  saveButton.textContent = "Save LoRA Preset";
-  saveButton.style.cssText = "padding: 5px 10px; cursor: pointer;";
-
+  const current = currentValue("");
   const status = document.createElement("span");
-  status.style.cssText = "opacity: 0.76;";
+  status.style.cssText = SETTINGS_STATUS_STYLE;
 
-  saveButton.onclick = async () => {
-    const originalText = saveButton.textContent;
-    try {
-      saveButton.disabled = true;
-      saveButton.textContent = "Saving...";
-      const data = await saveSetting("lora_preset.name_display", select.value);
-      status.textContent = "Saved";
-      status.style.color = "#16a34a";
-      window.dispatchEvent(new CustomEvent("easyuse-anima-settings-updated", { detail: data }));
-    } catch (error) {
-      status.textContent = `Save failed: ${error.message || error}`;
-      status.style.color = "#dc2626";
-    } finally {
-      saveButton.disabled = false;
-      saveButton.textContent = originalText;
-    }
+  const refreshCurrent = () => {
+    current.textContent = `Current: ${select.selectedOptions[0]?.textContent || select.value}`;
   };
+  refreshCurrent();
+  select.addEventListener("change", () => {
+    refreshCurrent();
+    saveSettingAndNotify("lora_preset.name_display", select.value, status).catch(() => {});
+  });
 
-  row.append(label, saveButton, status);
-  container.append(row);
+  row.append(label, status);
+  container.append(row, current);
   return container;
 }
 
 function naiaSettingsEditor(settings = {}) {
   const container = document.createElement("div");
-  container.style.cssText = "max-width: 760px; line-height: 1.45;";
+  container.style.cssText = SETTINGS_PANEL_STYLE;
 
   const guide = document.createElement("div");
   guide.textContent =
     "Controls Anima NAIA Random Prompt connection and Prompt Engineering override options. These values replace the advanced NAIA options that used to live on the node.";
-  guide.style.cssText = "margin-bottom: 8px; opacity: 0.78;";
+  guide.style.cssText = "opacity: 0.78;";
   container.append(guide);
 
   const endpointRow = document.createElement("div");
-  endpointRow.style.cssText = "display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin-bottom: 8px;";
+  endpointRow.style.cssText = "display: grid; grid-template-columns: minmax(150px, 1fr) minmax(92px, 120px); gap: 8px;";
 
   const hostLabel = document.createElement("label");
-  hostLabel.style.cssText = "display: flex; align-items: center; gap: 6px;";
+  hostLabel.style.cssText = SETTINGS_FIELD_STYLE;
   const hostText = document.createElement("span");
   hostText.textContent = "Host";
   const hostInput = document.createElement("input");
   hostInput.type = "text";
   hostInput.value = settings["naia.host"] || "127.0.0.1";
-  hostInput.style.cssText = "width: 150px; padding: 4px 6px;";
+  hostInput.style.cssText = SETTINGS_INPUT_STYLE;
   hostLabel.append(hostText, hostInput);
 
   const portLabel = document.createElement("label");
-  portLabel.style.cssText = "display: flex; align-items: center; gap: 6px;";
+  portLabel.style.cssText = SETTINGS_FIELD_STYLE;
   const portText = document.createElement("span");
   portText.textContent = "Port";
   const portInput = document.createElement("input");
@@ -349,13 +406,13 @@ function naiaSettingsEditor(settings = {}) {
   portInput.max = "65535";
   portInput.step = "1";
   portInput.value = String(settings["naia.port"] || 7243);
-  portInput.style.cssText = "width: 86px; padding: 4px 6px;";
+  portInput.style.cssText = SETTINGS_INPUT_STYLE;
   portLabel.append(portText, portInput);
   endpointRow.append(hostLabel, portLabel);
   container.append(endpointRow);
 
   const useSettingsRow = document.createElement("label");
-  useSettingsRow.style.cssText = "display: flex; align-items: center; gap: 7px; margin-bottom: 8px;";
+  useSettingsRow.style.cssText = SETTINGS_ROW_STYLE;
   const useSettingsToggle = document.createElement("input");
   useSettingsToggle.type = "checkbox";
   useSettingsToggle.checked = settings["naia.use_naia_settings"] !== "false";
@@ -365,7 +422,7 @@ function naiaSettingsEditor(settings = {}) {
   container.append(useSettingsRow);
 
   const textGrid = document.createElement("div");
-  textGrid.style.cssText = "display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 8px; max-width: 680px;";
+  textGrid.style.cssText = "display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 8px; width: 100%;";
   const textareas = new Map();
   for (const [key, labelText] of [
     ["pre_prompt", "Pre prompt"],
@@ -388,20 +445,22 @@ function naiaSettingsEditor(settings = {}) {
 
   const ppTitle = document.createElement("div");
   ppTitle.textContent = "Preprocessing options";
-  ppTitle.style.cssText = "margin: 10px 0 5px; font-weight: 700;";
+  ppTitle.style.cssText = "font-weight: 700;";
   container.append(ppTitle);
 
   const ppGrid = document.createElement("div");
   ppGrid.style.cssText =
-    "display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 6px 12px; max-width: 680px;";
+    "display: grid; grid-template-columns: repeat(auto-fit, minmax(185px, 1fr)); gap: 6px 10px; width: 100%;";
   const preprocessingSelects = new Map();
   for (const [key, labelText] of NAIA_PREPROCESSING_OPTIONS) {
     const label = document.createElement("label");
-    label.style.cssText = "display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 0.92em;";
+    label.style.cssText =
+      "display: grid; grid-template-columns: minmax(0, 1fr) 68px; align-items: center; gap: 7px; font-size: 0.92em;";
     const text = document.createElement("span");
     text.textContent = labelText;
+    text.style.cssText = "min-width: 0;";
     const select = document.createElement("select");
-    select.style.cssText = "width: 76px; padding: 3px 4px;";
+    select.style.cssText = "width: 68px; padding: 3px 4px;";
     for (const value of ["skip", "on", "off"]) {
       const option = document.createElement("option");
       option.value = value;
@@ -416,44 +475,57 @@ function naiaSettingsEditor(settings = {}) {
   container.append(ppGrid);
 
   const controls = document.createElement("div");
-  controls.style.cssText = "display: flex; align-items: center; gap: 8px; margin-top: 10px; flex-wrap: wrap;";
+  controls.style.cssText = SETTINGS_ROW_STYLE;
 
-  const saveButton = document.createElement("button");
-  saveButton.textContent = "Save NAIA Settings";
-  saveButton.style.cssText = "padding: 5px 10px; cursor: pointer;";
-
+  const current = currentValue("");
   const status = document.createElement("span");
-  status.style.cssText = "opacity: 0.76;";
+  status.style.cssText = SETTINGS_STATUS_STYLE;
 
-  saveButton.onclick = async () => {
-    const originalText = saveButton.textContent;
-    try {
-      saveButton.disabled = true;
-      saveButton.textContent = "Saving...";
-      const port = Math.max(1, Math.min(65535, Number.parseInt(portInput.value || "7243", 10) || 7243));
-      portInput.value = String(port);
-      await saveSetting("naia.host", hostInput.value.trim() || "127.0.0.1");
-      await saveSetting("naia.port", String(port));
-      await saveSetting("naia.use_naia_settings", useSettingsToggle.checked ? "true" : "false");
-      for (const [key, textarea] of textareas.entries()) {
-        await saveSetting(`naia.${key}`, textarea.value);
-      }
-      for (const [key, select] of preprocessingSelects.entries()) {
-        await saveSetting(`naia.${key}`, select.value);
-      }
-      status.textContent = "Saved. Queue again to apply.";
-      status.style.color = "#16a34a";
-    } catch (error) {
-      status.textContent = `Save failed: ${error.message || error}`;
-      status.style.color = "#dc2626";
-    } finally {
-      saveButton.disabled = false;
-      saveButton.textContent = originalText;
-    }
+  const sanitizePort = () => {
+    const port = Math.max(1, Math.min(65535, Number.parseInt(portInput.value || "7243", 10) || 7243));
+    portInput.value = String(port);
+    return port;
   };
+  const refreshCurrent = () => {
+    const promptState = [...textareas.entries()]
+      .map(([key, textarea]) => `${key.replace("_", " ")} ${textarea.value.trim() ? "set" : "empty"}`)
+      .join(", ");
+    const overrideCount = [...preprocessingSelects.values()].filter((select) => select.value !== "skip").length;
+    current.textContent =
+      `Current: ${hostInput.value.trim() || "127.0.0.1"}:${portInput.value || "7243"}, ` +
+      `desktop settings ${formatOnOff(useSettingsToggle.checked)}, ` +
+      `${promptState}, preprocessing overrides ${overrideCount}`;
+  };
+  refreshCurrent();
 
-  controls.append(saveButton, status);
-  container.append(controls);
+  hostInput.addEventListener("input", () => {
+    refreshCurrent();
+    scheduleSettingSave("naia.host", hostInput.value.trim() || "127.0.0.1", status);
+  });
+  portInput.addEventListener("input", () => {
+    sanitizePort();
+    refreshCurrent();
+    scheduleSettingSave("naia.port", portInput.value, status);
+  });
+  useSettingsToggle.addEventListener("change", () => {
+    refreshCurrent();
+    saveSettingAndNotify("naia.use_naia_settings", useSettingsToggle.checked ? "true" : "false", status).catch(() => {});
+  });
+  for (const [key, textarea] of textareas.entries()) {
+    textarea.addEventListener("input", () => {
+      refreshCurrent();
+      scheduleSettingSave(`naia.${key}`, textarea.value, status);
+    });
+  }
+  for (const [key, select] of preprocessingSelects.entries()) {
+    select.addEventListener("change", () => {
+      refreshCurrent();
+      saveSettingAndNotify(`naia.${key}`, select.value, status).catch(() => {});
+    });
+  }
+
+  controls.append(status);
+  container.append(current, controls);
   return container;
 }
 
@@ -467,19 +539,19 @@ function autocompleteDatasetSelector(initialValue = {}) {
       ? initialValue.limit || 20
       : 20;
   const container = document.createElement("div");
-  container.style.cssText = "max-width: 760px; line-height: 1.45;";
+  container.style.cssText = SETTINGS_PANEL_STYLE;
 
   const guide = document.createElement("div");
   guide.textContent =
     "Choose which bundled CSV is used for tag autocomplete and Prompt Studio tag highlighting. Korean searches use the selected CSV description text.";
-  guide.style.cssText = "margin-bottom: 7px; opacity: 0.78;";
+  guide.style.cssText = "opacity: 0.78;";
   container.append(guide);
 
   const row = document.createElement("div");
-  row.style.cssText = "display: flex; align-items: center; flex-wrap: wrap; gap: 8px;";
+  row.style.cssText = SETTINGS_ROW_STYLE;
 
   const select = document.createElement("select");
-  select.style.cssText = "min-width: min(100%, 340px); padding: 4px 8px;";
+  select.style.cssText = "box-sizing: border-box; width: min(100%, 340px); padding: 4px 8px;";
 
   const limitLabel = document.createElement("label");
   limitLabel.style.cssText = "display: flex; align-items: center; gap: 6px;";
@@ -494,14 +566,10 @@ function autocompleteDatasetSelector(initialValue = {}) {
   limitInput.style.cssText = "width: 72px; padding: 4px 6px;";
   limitLabel.append(limitText, limitInput);
 
-  const saveButton = document.createElement("button");
-  saveButton.textContent = "Save Autocomplete";
-  saveButton.style.cssText = "padding: 5px 10px; cursor: pointer;";
-
   const message = document.createElement("span");
-  message.style.cssText = "opacity: 0.76;";
+  message.style.cssText = SETTINGS_STATUS_STYLE;
 
-  row.append(select, limitLabel, saveButton, message);
+  row.append(select, limitLabel, message);
   container.append(row);
 
   const panel = document.createElement("div");
@@ -532,28 +600,31 @@ function autocompleteDatasetSelector(initialValue = {}) {
     }
   };
 
-  saveButton.onclick = async () => {
-    const originalText = saveButton.textContent;
+  const saveAutocompleteSettings = async () => {
     try {
-      saveButton.disabled = true;
-      saveButton.textContent = "Saving...";
       const limit = Math.max(1, Math.min(100, Number.parseInt(limitInput.value || "20", 10) || 20));
       limitInput.value = String(limit);
+      setStatus(message, "Saving...", "#64748b");
       await saveSetting("autocomplete.source", select.value);
       const data = await saveSetting("autocomplete.limit", String(limit));
-      message.textContent = "Saved";
-      message.style.color = "#16a34a";
+      updateSettingCache("autocomplete.source", select.value);
+      updateSettingCache("autocomplete.limit", String(limit));
+      setStatus(message, "Saved automatically", "#16a34a");
       renderOptions({ sources: panel._easyuseSources || [], source: data["autocomplete.source"] });
       window.dispatchEvent(new CustomEvent("easyuse-anima-settings-updated", { detail: data }));
       await refreshAutocompletePanels();
     } catch (error) {
-      message.textContent = `Save failed: ${error.message || error}`;
-      message.style.color = "#dc2626";
-    } finally {
-      saveButton.disabled = false;
-      saveButton.textContent = originalText;
+      setStatus(message, `Save failed: ${error.message || error}`, "#dc2626");
     }
   };
+
+  select.addEventListener("change", () => saveAutocompleteSettings());
+  limitInput.addEventListener("input", () => {
+    scheduleSettingSave("autocomplete.limit", String(
+      Math.max(1, Math.min(100, Number.parseInt(limitInput.value || "20", 10) || 20)),
+    ), message);
+  });
+  limitInput.addEventListener("change", () => saveAutocompleteSettings());
 
   refresh();
   return container;
@@ -622,6 +693,7 @@ app.registerExtension({
   name: "easyuse-anima.settings",
   async setup() {
     const settings = await getSettings();
+    window.__easyuseAnimaSettings = { ...settings };
 
     app.ui.settings.addSetting({
       id: "EasyUseAnima.Section.Prompt",

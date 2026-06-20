@@ -44,7 +44,7 @@ class LoraPresetTests(unittest.TestCase):
 
         result = unwrap_result(response)
         self.assertEqual(result[0], "@artist")
-        self.assertEqual(result[1], [(os.path.join(os.sep, "loras", "style", "foo.safetensors"), 0.75, 0.75)])
+        self.assertEqual(result[1], [(os.path.join("style", "foo.safetensors"), 0.75, 0.75)])
         self.assertEqual(result[2], "style/foo.safetensors_trigger")
         self.assertEqual(result[3], "<lora:style/foo:0.75>")
         self.assertEqual(result[4], 2)
@@ -71,6 +71,29 @@ class LoraPresetTests(unittest.TestCase):
         result = unwrap_result(response)
         self.assertEqual(result[1], [("foo.safetensors", 1.0, 0.5)])
         self.assertEqual(result[3], "<lora:foo:1:0.5>")
+
+    def test_build_outputs_relative_lora_stack_paths_for_absolute_inputs(self):
+        loras_root = os.path.join("D:\\", "ComfyUI", "ComfyUI_main", "models", "loras")
+        absolute_lora = os.path.join(loras_root, "style", "foo.safetensors")
+        loras = [
+            {"name": absolute_lora, "on": True, "strength": 0.8},
+        ]
+
+        with (
+            patch("nodes._get_lora_info", lambda name: (name, [])),
+            patch("nodes._apply_lora_syntax_format", lambda name: "foo"),
+        ):
+            response = EasyUseAnimaLoraPreset().build(
+                style_prompt="style",
+                profile_index=1,
+                profile_count=1,
+                lora_name="None",
+                loras=json.dumps(loras),
+                profile_data="{}",
+            )
+
+        result = unwrap_result(response)
+        self.assertEqual(result[1], [(os.path.join("style", "foo.safetensors"), 0.8, 0.8)])
 
     def test_build_accepts_missing_internal_profile_count(self):
         response = EasyUseAnimaLoraPreset().build(

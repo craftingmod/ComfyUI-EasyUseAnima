@@ -777,7 +777,7 @@ function tokenSpanHtml(text, token) {
 function syntaxHtml(text) {
   return escapeHtml(text).replace(
     /(:)([-+]?\d+(?:\.\d+)?)(\))/g,
-    `$1<span style="color: ${WEIGHT_NUMBER_COLOR}; font-weight: 700">$2</span>$3`,
+    `$1<span style="color: ${WEIGHT_NUMBER_COLOR}">$2</span>$3`,
   );
 }
 
