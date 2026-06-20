@@ -643,6 +643,7 @@ class SettingsTests(unittest.TestCase):
                 "lora_preset.name_display",
                 "prompt_studio.typo_indicator",
                 "prompt_studio.colors",
+                "prompt_studio.naia_general_above_auto_toggle",
                 "naia.host",
                 "naia.port",
                 "naia.use_naia_settings",

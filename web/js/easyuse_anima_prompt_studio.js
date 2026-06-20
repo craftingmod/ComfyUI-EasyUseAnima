@@ -101,6 +101,7 @@ const WEIGHTED_TOKEN_RE = /^\((.*):[-+]?\d+(?:\.\d+)?\)$/s;
 const INLINE_SPACE_RE = /[ \t]+/g;
 const PROMPT_STUDIO_SETTINGS = {
   typoIndicator: true,
+  naiaGeneralAboveAutoToggle: false,
 };
 let middlePanForwardActive = false;
 const ADVANCED_CONTROL_WIDGETS = [
@@ -529,6 +530,8 @@ function parseColorSettings(value) {
 
 function applyPromptStudioSettings(settings) {
   PROMPT_STUDIO_SETTINGS.typoIndicator = settings?.["prompt_studio.typo_indicator"] !== "false";
+  PROMPT_STUDIO_SETTINGS.naiaGeneralAboveAutoToggle =
+    settings?.["prompt_studio.naia_general_above_auto_toggle"] === "true";
   const colors = parseColorSettings(settings?.["prompt_studio.colors"]);
   for (const [key, color] of Object.entries(colors)) {
     if (!SECTION_STYLES[key] || !isHexColor(color)) {
@@ -1544,6 +1547,22 @@ function scheduleAdvancedFieldHighlight(node, field, textarea) {
     });
 }
 
+function registerAdvancedAutocompleteInput(node, field, textarea) {
+  if (!(textarea instanceof HTMLTextAreaElement) || textarea.readOnly) {
+    return;
+  }
+  const options = {
+    node,
+    forceArtistOnly: field?.type === "artist",
+  };
+  if (typeof window.easyuseAnimaHookAutocompleteInput === "function") {
+    window.easyuseAnimaHookAutocompleteInput(textarea, options);
+    return;
+  }
+  window.__easyuseAnimaPendingAutocompleteInputs ||= [];
+  window.__easyuseAnimaPendingAutocompleteInputs.push({ input: textarea, options });
+}
+
 function refreshAdvancedHighlights(node) {
   const editor = node?.__easyuseAnimaAdvancedEditorEl;
   if (!editor) {
@@ -2064,6 +2083,32 @@ function writeAdvancedFields(node, fields, { render = false } = {}) {
   }
 }
 
+function applyAdvancedNaiaGeneralAutoToggle(node, fields) {
+  if (!PROMPT_STUDIO_SETTINGS.naiaGeneralAboveAutoToggle || !Array.isArray(fields)) {
+    return false;
+  }
+  const naiaIndex = fields.findIndex(
+    (field) => field?.pane === "positive" && field?.type === "naia",
+  );
+  if (naiaIndex < 0) {
+    return false;
+  }
+  const useNaia = !!findWidget(node, "use_naia")?.value;
+  let changed = false;
+  for (let index = 0; index < naiaIndex; index += 1) {
+    const field = fields[index];
+    if (field?.pane !== "positive" || field?.type !== "general") {
+      continue;
+    }
+    const nextEnabled = !useNaia;
+    if ((field.enabled !== false) !== nextEnabled) {
+      field.enabled = nextEnabled;
+      changed = true;
+    }
+  }
+  return changed;
+}
+
 function advancedFieldInputName(field) {
   const raw = String(field?.id || "field")
     .replace(/[^a-zA-Z0-9_]/g, "_")
@@ -2528,6 +2573,7 @@ function createAdvancedFieldElement(node, field) {
       const nextValue = !findWidget(node, "use_naia")?.value;
       setAdvancedControlValue(node, "consume_naia_on_queue", true);
       setAdvancedControlValue(node, "use_naia", nextValue);
+      applyAdvancedNaiaGeneralAutoToggle(node, currentFields);
       writeAdvancedFields(node, currentFields, { render: true });
     }, linkedUseNaia);
     fillButton.classList.add("easyuse-anima-naia-fill");
@@ -2597,6 +2643,7 @@ function createAdvancedFieldElement(node, field) {
   });
   textarea.addEventListener("click", () => updateAdvancedFieldHighlight(node, field, textarea));
   textarea.addEventListener("keyup", () => updateAdvancedFieldHighlight(node, field, textarea));
+  registerAdvancedAutocompleteInput(node, field, textarea);
   requestAnimationFrame(() => {
     syncHeight();
     updateFieldHighlight();
@@ -2687,6 +2734,7 @@ function renderAdvancedEditor(node) {
     return;
   }
   node.__easyuseAnimaAdvancedFields = parseAdvancedFields(node);
+  applyAdvancedNaiaGeneralAutoToggle(node, node.__easyuseAnimaAdvancedFields);
   editor.innerHTML = "";
   editor.style.width = `${advancedEditorWidth(node)}px`;
   editor.style.maxWidth = `${advancedEditorWidth(node)}px`;
@@ -2811,6 +2859,18 @@ app.registerExtension({
     installMiddlePanForwarder();
     installAdvancedSaveSync();
     await loadPromptStudioSettings();
+    window.addEventListener("easyuse-anima-settings-updated", (event) => {
+      if (!event?.detail) {
+        return;
+      }
+      applyPromptStudioSettings(event.detail);
+      for (const node of app.graph?._nodes || []) {
+        if (isAdvancedNode(node)) {
+          renderAdvancedEditor(node);
+        }
+      }
+      refreshAllPromptHighlights();
+    });
   },
   async beforeRegisterNodeDef(nodeType, nodeData) {
     if (

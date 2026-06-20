@@ -64,6 +64,7 @@ let maxResults = DEFAULT_MAX_RESULTS;
 let popup = null;
 let activeState = null;
 let activeRefreshFrame = null;
+window.__easyuseAnimaPendingAutocompleteInputs ||= [];
 
 function clamp(value, min, max) {
   return Math.min(max, Math.max(min, value));
@@ -488,8 +489,11 @@ function commitSuggestion(state, entry) {
   const caret = prefix.length + insert.length;
   state.input.setSelectionRange(caret, caret);
   state.input.dispatchEvent(new Event("input", { bubbles: true }));
-  state.widget.value = state.input.value;
-  state.widget.callback?.(state.input.value);
+  if (state.widget) {
+    state.widget.value = state.input.value;
+    state.widget.callback?.(state.input.value);
+  }
+  state.onCommit?.(state.input.value);
   hidePopup();
 }
 
@@ -607,8 +611,7 @@ function debounce(fn, delay = 120) {
   return wrapped;
 }
 
-function hookWidget(node, widget) {
-  const input = findInputEl(widget);
+function hookInput(input, options = {}) {
   if (!input || input.__easyuseAnimaAutocomplete) {
     return;
   }
@@ -616,10 +619,11 @@ function hookWidget(node, widget) {
   let composing = false;
   let updateSeq = 0;
   const state = {
-    node,
-    widget,
+    node: options.node || null,
+    widget: options.widget || null,
     input,
-    forceArtistOnly: !!node.__easyuseAnimaArtistOnlyWidgets?.has(widget.name),
+    forceArtistOnly: !!options.forceArtistOnly,
+    onCommit: typeof options.onCommit === "function" ? options.onCommit : null,
   };
 
   const updateNow = async () => {
@@ -703,6 +707,26 @@ function hookWidget(node, widget) {
   input.__easyuseAnimaAutocomplete = true;
 }
 
+function hookWidget(node, widget) {
+  const input = findInputEl(widget);
+  hookInput(input, {
+    node,
+    widget,
+    forceArtistOnly: !!node.__easyuseAnimaArtistOnlyWidgets?.has(widget.name),
+  });
+}
+
+function installExternalInputHook() {
+  window.easyuseAnimaHookAutocompleteInput = (input, options = {}) => {
+    hookInput(input, options);
+  };
+  const pending = window.__easyuseAnimaPendingAutocompleteInputs || [];
+  window.__easyuseAnimaPendingAutocompleteInputs = [];
+  for (const item of pending) {
+    hookInput(item?.input, item?.options || {});
+  }
+}
+
 function hookNode(node, nodeData, attempt = 0) {
   const names = targetWidgets(nodeData);
   if (!names || (!hasExplicitTargets(nodeData) && shouldSkipNode(node, nodeData))) {
@@ -748,6 +772,7 @@ window.addEventListener("easyuse-anima-settings-updated", (event) => {
 app.registerExtension({
   name: "easyuse-anima.autocomplete",
   async setup() {
+    installExternalInputHook();
     await refreshAutocompleteSettings();
   },
   async beforeRegisterNodeDef(nodeType, nodeData) {

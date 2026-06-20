@@ -173,6 +173,17 @@ function promptStudioEditor(settings = {}) {
   typoRow.append(typoToggle, typoText);
   container.append(typoRow);
 
+  const naiaGeneralRow = document.createElement("label");
+  naiaGeneralRow.style.cssText = "display: flex; align-items: flex-start; gap: 7px; margin-bottom: 10px;";
+  const naiaGeneralToggle = document.createElement("input");
+  naiaGeneralToggle.type = "checkbox";
+  naiaGeneralToggle.checked = settings["prompt_studio.naia_general_above_auto_toggle"] === "true";
+  const naiaGeneralText = document.createElement("span");
+  naiaGeneralText.textContent =
+    "When Advanced NAIA is enabled, disable General fields above the NAIA field and re-enable them when NAIA is disabled";
+  naiaGeneralRow.append(naiaGeneralToggle, naiaGeneralText);
+  container.append(naiaGeneralRow);
+
   const colors = parseColorSettings(settings["prompt_studio.colors"]);
   const grid = document.createElement("div");
   grid.style.cssText =
@@ -223,8 +234,13 @@ function promptStudioEditor(settings = {}) {
       saveButton.disabled = true;
       saveButton.textContent = "Saving...";
       await saveSetting("prompt_studio.typo_indicator", typoToggle.checked ? "true" : "false");
-      await saveSetting("prompt_studio.colors", JSON.stringify(colorSettings));
-      status.textContent = "Saved. Reload ComfyUI page to apply.";
+      await saveSetting(
+        "prompt_studio.naia_general_above_auto_toggle",
+        naiaGeneralToggle.checked ? "true" : "false",
+      );
+      const data = await saveSetting("prompt_studio.colors", JSON.stringify(colorSettings));
+      window.dispatchEvent(new CustomEvent("easyuse-anima-settings-updated", { detail: data }));
+      status.textContent = "Saved.";
       status.style.color = "#16a34a";
     } catch (error) {
       status.textContent = `Save failed: ${error.message || error}`;

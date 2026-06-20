@@ -16,6 +16,7 @@ DEFAULT_SETTINGS = {
     "lora_preset.name_display": "name",
     "prompt_studio.typo_indicator": "true",
     "prompt_studio.colors": "",
+    "prompt_studio.naia_general_above_auto_toggle": "false",
     "naia.host": "127.0.0.1",
     "naia.port": "7243",
     "naia.use_naia_settings": "true",
@@ -106,6 +107,10 @@ def public_settings() -> dict:
         "prompt_studio.colors": settings.get(
             "prompt_studio.colors",
             DEFAULT_SETTINGS["prompt_studio.colors"],
+        ),
+        "prompt_studio.naia_general_above_auto_toggle": settings.get(
+            "prompt_studio.naia_general_above_auto_toggle",
+            DEFAULT_SETTINGS["prompt_studio.naia_general_above_auto_toggle"],
         ),
         "naia.host": settings.get("naia.host", DEFAULT_SETTINGS["naia.host"]),
         "naia.port": resolve_naia_port(settings),
