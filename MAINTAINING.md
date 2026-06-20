@@ -108,18 +108,17 @@ On Windows, prefer right-click paste. The official docs note that `Ctrl+V` can a
 
 Use this only after adding repository secret `REGISTRY_ACCESS_TOKEN`.
 
-Create `.github/workflows/publish_action.yml`:
+This repository keeps `.github/workflows/publish_action.yml` as a manual-only
+workflow to avoid accidental Registry publishing while release metadata is being
+edited. Trigger it from GitHub Actions with `workflow_dispatch`.
+
+The checked-in workflow is:
 
 ```yaml
 name: Publish to Comfy registry
 
 on:
   workflow_dispatch:
-  push:
-    branches:
-      - main
-    paths:
-      - "pyproject.toml"
 
 jobs:
   publish-node:
@@ -134,7 +133,8 @@ jobs:
           personal_access_token: ${{ secrets.REGISTRY_ACCESS_TOKEN }}
 ```
 
-This publishes when `pyproject.toml` changes on `main`, or when manually triggered.
+If automatic publishing is wanted later, add a guarded `push` trigger for
+`pyproject.toml` version changes after the release process is stable.
 
 ### 6. After Publishing
 

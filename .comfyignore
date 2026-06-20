@@ -1,10 +1,22 @@
+# Development-only files kept in git but excluded from Comfy Registry archives.
+tests/
+.github/
+
+# Local caches and editor/runtime artifacts.
 __pycache__/
 *.py[cod]
+*.pyo
 .pytest_cache/
 .ruff_cache/
 .mypy_cache/
 .vscode/
-tests/
+.venv/
+venv/
+env/
+.DS_Store
+Thumbs.db
+
+# Legacy/generated local dataset folders should not ship.
 docs/dev/
 models/animadex/
 __animadex__/import/
