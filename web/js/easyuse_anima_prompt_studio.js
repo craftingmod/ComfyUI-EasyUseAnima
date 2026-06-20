@@ -2173,14 +2173,14 @@ function applyAdvancedNaiaGeneralAutoToggle(node, fields) {
   if (naiaIndex < 0) {
     return false;
   }
-  const useNaia = !!findWidget(node, "use_naia")?.value;
+  const naiaEnabled = fields[naiaIndex]?.enabled !== false;
   let changed = false;
   for (let index = 0; index < naiaIndex; index += 1) {
     const field = fields[index];
     if (field?.pane !== "positive" || field?.type !== "general") {
       continue;
     }
-    const nextEnabled = !useNaia;
+    const nextEnabled = !naiaEnabled;
     if ((field.enabled !== false) !== nextEnabled) {
       field.enabled = nextEnabled;
       changed = true;
@@ -2666,17 +2666,17 @@ function createAdvancedFieldElement(node, field) {
     const fillButton = addTool("Fill from NAIA", ADVANCED_NAIA_FILL_TITLE, () => {
       const currentFields = node.__easyuseAnimaAdvancedFields || parseAdvancedFields(node);
       const target = currentFields.find((item) => item.id === field.id);
-      if (target) {
-        target.enabled = true;
+      if (target?.enabled === false) {
+        return;
       }
       const nextValue = !findWidget(node, "use_naia")?.value;
       setAdvancedControlValue(node, "consume_naia_on_queue", true);
       setAdvancedControlValue(node, "use_naia", nextValue);
       applyAdvancedNaiaGeneralAutoToggle(node, currentFields);
       writeAdvancedFields(node, currentFields, { render: true });
-    }, linkedUseNaia);
+    }, linkedUseNaia || field.enabled === false);
     fillButton.classList.add("easyuse-anima-naia-fill");
-    fillButton.classList.toggle("is-on", !!useNaiaWidget?.value);
+    fillButton.classList.toggle("is-on", field.enabled !== false && !!useNaiaWidget?.value);
     fillButton.classList.toggle("is-linked", linkedUseNaia);
   }
   addTool("↑", "Move up", () => move(-1), paneIndex <= 0);

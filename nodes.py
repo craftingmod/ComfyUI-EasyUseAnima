@@ -376,6 +376,15 @@ def _apply_advanced_field_inputs(fields: list[dict], field_inputs: dict) -> list
     return effective
 
 
+def _advanced_has_enabled_positive_naia(fields: list[dict]) -> bool:
+    return any(
+        field.get("pane") == "positive"
+        and field.get("type") == "naia"
+        and field.get("enabled") is not False
+        for field in fields
+    )
+
+
 def _upsert_positive_naia_field(fields: list[dict], prompt: str) -> list[dict]:
     normalized = _normalize_advanced_fields(fields)
     for field in normalized:
@@ -1169,9 +1178,9 @@ class EasyUseAnimaPromptStudioAdvanced:
         advanced_fields: str = "",
         **kwargs,
     ):
-        if _as_bool(use_naia, False):
-            return float("nan")
         fields = _normalize_advanced_fields(advanced_fields)
+        if _as_bool(use_naia, False) and _advanced_has_enabled_positive_naia(fields):
+            return float("nan")
         effective_fields = _apply_advanced_field_inputs(fields, kwargs)
         return _stable_change_key({
             "mode": "prompt_studio_advanced",
@@ -1246,7 +1255,8 @@ class EasyUseAnimaPromptStudioAdvanced:
         saved_fields = _clone_advanced_fields(fields)
         effective_fields = _apply_advanced_field_inputs(fields, field_inputs)
         effective_field_inputs = _advanced_field_input_values(field_inputs)
-        live_use_naia = _as_bool(use_naia, False)
+        requested_use_naia = _as_bool(use_naia, False)
+        live_use_naia = requested_use_naia and _advanced_has_enabled_positive_naia(fields)
         metadata_use_naia = live_use_naia
 
         if live_use_naia:
@@ -1280,7 +1290,7 @@ class EasyUseAnimaPromptStudioAdvanced:
             pin_trigger_tags_to_front,
         )
         return {
-            "ui": self._ui(fields_json, live_use_naia, effective_field_inputs),
+            "ui": self._ui(fields_json, requested_use_naia, effective_field_inputs),
             "result": result,
         }
 
