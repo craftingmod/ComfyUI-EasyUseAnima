@@ -100,6 +100,7 @@ ADVANCED_RESOLUTION_BUCKETS = {
     ),
 }
 CUSTOM_ADVANCED_RESOLUTION_BUCKET = "Custom"
+NAIA_ADVANCED_RESOLUTION_BUCKET = "NAIA"
 DEFAULT_ADVANCED_RESOLUTION_BUCKET = "1024"
 DEFAULT_ADVANCED_RESOLUTION_SIZE = "1024 * 1024 (1:1)"
 
@@ -194,8 +195,8 @@ def _sorted_resolution_options(bucket: str) -> list[tuple[int, int]]:
 
 def _normalize_resolution_bucket(value) -> str:
     value = str(_single_value(value) or "").strip()
-    if value == CUSTOM_ADVANCED_RESOLUTION_BUCKET:
-        return CUSTOM_ADVANCED_RESOLUTION_BUCKET
+    if value in {CUSTOM_ADVANCED_RESOLUTION_BUCKET, NAIA_ADVANCED_RESOLUTION_BUCKET}:
+        return value
     return value if value in ADVANCED_RESOLUTION_BUCKETS else DEFAULT_ADVANCED_RESOLUTION_BUCKET
 
 
@@ -213,7 +214,7 @@ def _advanced_resolution_from_selection(
     custom_height: int | str = 1024,
 ) -> tuple[int, int]:
     bucket_name = _normalize_resolution_bucket(bucket)
-    if bucket_name == CUSTOM_ADVANCED_RESOLUTION_BUCKET:
+    if bucket_name in {CUSTOM_ADVANCED_RESOLUTION_BUCKET, NAIA_ADVANCED_RESOLUTION_BUCKET}:
         return (
             _snap_resolution_32(custom_width, 1024),
             _snap_resolution_32(custom_height, 1024),
@@ -397,7 +398,7 @@ def _normalize_advanced_fields(value: str | list | None) -> list[dict]:
         raw = _advanced_default_fields()
 
     fields: list[dict] = []
-    seen_naia = False
+    seen_naia_panes: set[str] = set()
     seen_trigger = False
     for index, item in enumerate(raw):
         if not isinstance(item, dict):
@@ -408,13 +409,12 @@ def _normalize_advanced_fields(value: str | list | None) -> list[dict]:
         field_type = str(item.get("type") or "general").strip().lower()
         if field_type not in ADVANCED_FIELD_TYPES:
             field_type = "general"
-        if pane == "negative" and field_type in {"naia", "trigger"}:
+        if pane == "negative" and field_type == "trigger":
             field_type = "general"
         if field_type == "naia":
-            if seen_naia:
+            if pane in seen_naia_panes:
                 continue
-            seen_naia = True
-            pane = "positive"
+            seen_naia_panes.add(pane)
         if field_type == "trigger":
             if seen_trigger:
                 continue
@@ -473,31 +473,29 @@ def _apply_advanced_field_inputs(fields: list[dict], field_inputs: dict) -> list
     return effective
 
 
-def _advanced_has_enabled_positive_naia(fields: list[dict]) -> bool:
-    return any(
-        field.get("pane") == "positive"
-        and field.get("type") == "naia"
-        and field.get("enabled") is not False
+def _advanced_enabled_naia_panes(fields: list[dict]) -> set[str]:
+    return {
+        str(field.get("pane") or "positive")
         for field in fields
-    )
+        if field.get("type") == "naia" and field.get("enabled") is not False
+    }
 
 
-def _upsert_positive_naia_field(fields: list[dict], prompt: str) -> list[dict]:
+def _advanced_has_enabled_naia(fields: list[dict]) -> bool:
+    return bool(_advanced_enabled_naia_panes(fields))
+
+
+def _advanced_uses_naia_resolution(bucket) -> bool:
+    return _normalize_resolution_bucket(bucket) == NAIA_ADVANCED_RESOLUTION_BUCKET
+
+
+def _set_naia_field_text(fields: list[dict], pane: str, prompt: str) -> list[dict]:
     normalized = _normalize_advanced_fields(fields)
     for field in normalized:
-        if field["pane"] == "positive" and field["type"] == "naia":
+        if field["pane"] == pane and field["type"] == "naia":
             field["text"] = prompt
             field["enabled"] = True
             return normalized
-    normalized.append({
-        "id": "positive_naia",
-        "pane": "positive",
-        "type": "naia",
-        "label": ADVANCED_FIELD_LABELS["naia"],
-        "text": prompt,
-        "height": 150,
-        "enabled": True,
-    })
     return normalized
 
 
@@ -1304,7 +1302,10 @@ class EasyUseAnimaPromptStudioAdvanced:
         **kwargs,
     ):
         fields = _normalize_advanced_fields(advanced_fields)
-        if _as_bool(use_naia, False) and _advanced_has_enabled_positive_naia(fields):
+        if _as_bool(use_naia, False) and (
+            _advanced_has_enabled_naia(fields)
+            or _advanced_uses_naia_resolution(resolution_bucket)
+        ):
             return float("nan")
         effective_fields = _apply_advanced_field_inputs(fields, kwargs)
         return _stable_change_key({
@@ -1329,6 +1330,7 @@ class EasyUseAnimaPromptStudioAdvanced:
         unique_id,
         advanced_fields: str,
         use_naia: bool,
+        extra_updates: dict[str, Any] | None = None,
     ) -> None:
         node_id = _single_value(unique_id)
         if node_id is None:
@@ -1338,6 +1340,8 @@ class EasyUseAnimaPromptStudioAdvanced:
             "use_naia": _as_bool(use_naia, False),
             "advanced_fields": advanced_fields,
         }
+        if extra_updates:
+            updates.update(extra_updates)
 
         if isinstance(workflow_prompt, dict):
             prompt_node = workflow_prompt.get(node_id)
@@ -1361,14 +1365,22 @@ class EasyUseAnimaPromptStudioAdvanced:
             widgets_values[index] = value
 
     @staticmethod
-    def _ui(advanced_fields: str, use_naia: bool, field_inputs: dict | None = None):
-        return {
+    def _ui(
+        advanced_fields: str,
+        use_naia: bool,
+        field_inputs: dict | None = None,
+        extra_payload: dict[str, Any] | None = None,
+    ):
+        payload = {
             "prompt_studio_advanced": [{
                 "advanced_fields": advanced_fields,
                 "use_naia": _as_bool(use_naia, False),
                 "field_inputs": field_inputs or {},
             }]
         }
+        if extra_payload:
+            payload["prompt_studio_advanced"][0].update(extra_payload)
+        return payload
 
     def build(
         self,
@@ -1391,8 +1403,12 @@ class EasyUseAnimaPromptStudioAdvanced:
         effective_fields = _apply_advanced_field_inputs(fields, field_inputs)
         effective_field_inputs = _advanced_field_input_values(field_inputs)
         requested_use_naia = _as_bool(use_naia, False)
-        live_use_naia = requested_use_naia and _advanced_has_enabled_positive_naia(fields)
+        enabled_naia_panes = _advanced_enabled_naia_panes(fields)
+        use_naia_resolution = _advanced_uses_naia_resolution(resolution_bucket)
+        live_use_naia = requested_use_naia and (bool(enabled_naia_panes) or use_naia_resolution)
         metadata_use_naia = live_use_naia
+        metadata_updates: dict[str, Any] = {}
+        ui_updates: dict[str, Any] = {}
         width, height = _advanced_resolution_from_selection(
             resolution_bucket,
             resolution_size,
@@ -1410,9 +1426,24 @@ class EasyUseAnimaPromptStudioAdvanced:
                 naia_settings["preprocessing"],
             )
             resp = _post_random(naia_settings["host"], naia_settings["port"], body)
-            naia_prompt, _naia_negative, _naia_width, _naia_height = _parse_random_response(resp)
-            saved_fields = _upsert_positive_naia_field(saved_fields, naia_prompt)
-            effective_fields = _upsert_positive_naia_field(effective_fields, naia_prompt)
+            naia_prompt, naia_negative, naia_width, naia_height = _parse_random_response(resp)
+            if "positive" in enabled_naia_panes:
+                saved_fields = _set_naia_field_text(saved_fields, "positive", naia_prompt)
+                effective_fields = _set_naia_field_text(effective_fields, "positive", naia_prompt)
+            if "negative" in enabled_naia_panes:
+                saved_fields = _set_naia_field_text(saved_fields, "negative", naia_negative)
+                effective_fields = _set_naia_field_text(effective_fields, "negative", naia_negative)
+            if use_naia_resolution:
+                width = _snap_resolution_32(naia_width, 1024)
+                height = _snap_resolution_32(naia_height, 1024)
+                resolution_label = _resolution_label(width, height)
+                metadata_updates.update({
+                    "resolution_bucket": CUSTOM_ADVANCED_RESOLUTION_BUCKET,
+                    "resolution_size": resolution_label,
+                    "resolution_custom_width": width,
+                    "resolution_custom_height": height,
+                })
+                ui_updates.update(metadata_updates)
             metadata_use_naia = False
 
         fields_json = _advanced_fields_json(saved_fields)
@@ -1423,6 +1454,7 @@ class EasyUseAnimaPromptStudioAdvanced:
                 unique_id,
                 fields_json,
                 metadata_use_naia,
+                metadata_updates,
             )
 
         result = _build_advanced_prompts(
@@ -1431,7 +1463,7 @@ class EasyUseAnimaPromptStudioAdvanced:
             pin_trigger_tags_to_front,
         )
         return {
-            "ui": self._ui(fields_json, requested_use_naia, effective_field_inputs),
+            "ui": self._ui(fields_json, requested_use_naia, effective_field_inputs, ui_updates),
             "result": (*result, width, height),
         }
 

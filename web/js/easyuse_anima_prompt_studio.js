@@ -173,6 +173,7 @@ const ADVANCED_RESOLUTION_BUCKETS = {
   ],
 };
 const CUSTOM_ADVANCED_RESOLUTION_BUCKET = "Custom";
+const NAIA_ADVANCED_RESOLUTION_BUCKET = "NAIA";
 const DEFAULT_ADVANCED_RESOLUTION_BUCKET = "1024";
 const DEFAULT_ADVANCED_RESOLUTION_SIZE = "1024 * 1024 (1:1)";
 const ADVANCED_WIDGET_INDEX = {
@@ -2161,7 +2162,7 @@ function removeAdvancedInternalInputSockets(node) {
 function normalizeAdvancedField(field, index = 0) {
   const pane = field?.pane === "negative" ? "negative" : "positive";
   let type = ADVANCED_FIELD_TYPES.includes(field?.type) ? field.type : "general";
-  if (pane === "negative" && (type === "naia" || type === "trigger")) {
+  if (pane === "negative" && type === "trigger") {
     type = "general";
   }
   const label = String(field?.label || ADVANCED_FIELD_LABELS[type] || "General Tags");
@@ -2185,16 +2186,15 @@ function parseAdvancedFields(node) {
     const parsed = JSON.parse(sourceValue);
     if (Array.isArray(parsed) && parsed.length) {
       const fields = [];
-      let seenNaia = false;
+      const seenNaiaPanes = new Set();
       let seenTrigger = false;
       parsed.forEach((field, index) => {
         const normalized = normalizeAdvancedField(field, index);
         if (normalized.type === "naia") {
-          if (seenNaia) {
+          if (seenNaiaPanes.has(normalized.pane)) {
             return;
           }
-          seenNaia = true;
-          normalized.pane = "positive";
+          seenNaiaPanes.add(normalized.pane);
         }
         if (normalized.type === "trigger") {
           if (seenTrigger) {
@@ -2490,8 +2490,8 @@ function advancedResolutionOptions(bucket) {
 
 function normalizeAdvancedResolutionBucket(value) {
   const bucket = String(value || "").trim();
-  if (bucket === CUSTOM_ADVANCED_RESOLUTION_BUCKET) {
-    return CUSTOM_ADVANCED_RESOLUTION_BUCKET;
+  if (bucket === CUSTOM_ADVANCED_RESOLUTION_BUCKET || bucket === NAIA_ADVANCED_RESOLUTION_BUCKET) {
+    return bucket;
   }
   return Object.prototype.hasOwnProperty.call(ADVANCED_RESOLUTION_BUCKETS, bucket)
     ? bucket
@@ -2507,7 +2507,7 @@ function resolutionRatioFromLabel(value) {
 }
 
 function normalizeAdvancedResolutionSize(bucket, value) {
-  if (bucket === CUSTOM_ADVANCED_RESOLUTION_BUCKET) {
+  if (bucket === CUSTOM_ADVANCED_RESOLUTION_BUCKET || bucket === NAIA_ADVANCED_RESOLUTION_BUCKET) {
     return String(value || DEFAULT_ADVANCED_RESOLUTION_SIZE);
   }
   const options = advancedResolutionOptions(bucket);
@@ -2590,7 +2590,7 @@ function createAdvancedResolutionBar(node) {
 
   const bucketValue = normalizeAdvancedResolutionBucket(bucketWidget.value);
   const customResolution = advancedCustomResolution(node);
-  const sizeValue = bucketValue === CUSTOM_ADVANCED_RESOLUTION_BUCKET
+  const sizeValue = bucketValue === CUSTOM_ADVANCED_RESOLUTION_BUCKET || bucketValue === NAIA_ADVANCED_RESOLUTION_BUCKET
     ? advancedResolutionLabel(customResolution.width, customResolution.height)
     : normalizeAdvancedResolutionSize(bucketValue, sizeWidget.value);
   if (bucketWidget.value !== bucketValue) {
@@ -2613,6 +2613,11 @@ function createAdvancedResolutionBar(node) {
     option.selected = bucket === bucketValue;
     bucketSelect.append(option);
   }
+  const naiaOption = document.createElement("option");
+  naiaOption.value = NAIA_ADVANCED_RESOLUTION_BUCKET;
+  naiaOption.textContent = NAIA_ADVANCED_RESOLUTION_BUCKET;
+  naiaOption.selected = bucketValue === NAIA_ADVANCED_RESOLUTION_BUCKET;
+  bucketSelect.append(naiaOption);
   const customOption = document.createElement("option");
   customOption.value = CUSTOM_ADVANCED_RESOLUTION_BUCKET;
   customOption.textContent = CUSTOM_ADVANCED_RESOLUTION_BUCKET;
@@ -2672,8 +2677,22 @@ function createAdvancedResolutionBar(node) {
     valueBox.append(widthInput, separator, heightInput);
     setAdvancedCustomResolution(node, widthInput.value, heightInput.value, { normalize: true });
   };
+  const renderNaiaResolution = () => {
+    valueBox.innerHTML = "";
+    valueBox.className = "easyuse-anima-advanced-resolution-custom";
+    const current = advancedCustomResolution(node);
+    const label = document.createElement("span");
+    label.textContent = advancedResolutionLabel(current.width, current.height);
+    label.title = "Filled from NAIA on queue. Saved image workflows store this as Custom.";
+    valueBox.append(label);
+    setAdvancedWidgetValue(node, "resolution_size", advancedResolutionLabel(current.width, current.height));
+  };
   const fillSizeOptions = (bucket, selected) => {
     valueBox.className = "";
+    if (bucket === NAIA_ADVANCED_RESOLUTION_BUCKET) {
+      renderNaiaResolution();
+      return;
+    }
     if (bucket === CUSTOM_ADVANCED_RESOLUTION_BUCKET) {
       renderCustomInputs();
       return;
@@ -2684,11 +2703,15 @@ function createAdvancedResolutionBar(node) {
 
   bucketSelect.addEventListener("change", () => {
     const nextBucket = normalizeAdvancedResolutionBucket(bucketSelect.value);
-    const nextSize = nextBucket === CUSTOM_ADVANCED_RESOLUTION_BUCKET
+    const nextSize = nextBucket === CUSTOM_ADVANCED_RESOLUTION_BUCKET || nextBucket === NAIA_ADVANCED_RESOLUTION_BUCKET
       ? advancedResolutionLabel(advancedCustomResolution(node).width, advancedCustomResolution(node).height)
       : normalizeAdvancedResolutionSize(nextBucket, sizeWidget.value);
     setAdvancedWidgetValue(node, "resolution_bucket", nextBucket);
     setAdvancedWidgetValue(node, "resolution_size", nextSize);
+    if (nextBucket === NAIA_ADVANCED_RESOLUTION_BUCKET) {
+      setAdvancedControlValue(node, "consume_naia_on_queue", true);
+      setAdvancedControlValue(node, "use_naia", true);
+    }
     fillSizeOptions(nextBucket, nextSize);
   });
 
@@ -2699,6 +2722,11 @@ function createAdvancedResolutionBar(node) {
 function advancedPaneFields(node, pane) {
   return (node.__easyuseAnimaAdvancedFields || parseAdvancedFields(node))
     .filter((field) => field.pane === pane);
+}
+
+function hasAdvancedNaia(node, pane) {
+  return (node.__easyuseAnimaAdvancedFields || parseAdvancedFields(node))
+    .some((field) => field.pane === pane && field.type === "naia");
 }
 
 function hasPositiveNaia(node) {
@@ -3062,7 +3090,7 @@ function createAdvancedFieldElement(node, field) {
 
 function addAdvancedField(node, pane, type) {
   const fields = node.__easyuseAnimaAdvancedFields || parseAdvancedFields(node);
-  if (type === "naia" && hasPositiveNaia(node)) {
+  if (type === "naia" && hasAdvancedNaia(node, pane)) {
     return;
   }
   if (type === "trigger" && hasPositiveTrigger(node)) {
@@ -3099,7 +3127,7 @@ function createAdvancedPane(node, pane, title) {
     const button = document.createElement("button");
     button.type = "button";
     button.textContent = label;
-    button.disabled = (type === "naia" && hasPositiveNaia(node))
+    button.disabled = (type === "naia" && hasAdvancedNaia(node, pane))
       || (type === "trigger" && hasPositiveTrigger(node));
     button.addEventListener("click", (event) => {
       event.preventDefault();
@@ -3114,9 +3142,7 @@ function createAdvancedPane(node, pane, title) {
     addButton("trigger", "+ Trigger");
   }
   addButton("general", "+ General");
-  if (pane === "positive") {
-    addButton("naia", "+ NAIA");
-  }
+  addButton("naia", "+ NAIA");
   header.append(heading, actions);
   section.append(header);
 
@@ -3227,6 +3253,12 @@ function applyAdvancedExecutedInputs(node, message) {
   const useNaia = findWidget(node, "use_naia");
   if (useNaia && payload.use_naia != null) {
     useNaia.value = !!payload.use_naia;
+  }
+  for (const name of ["resolution_bucket", "resolution_size", "resolution_custom_width", "resolution_custom_height"]) {
+    const widget = findWidget(node, name);
+    if (widget && payload[name] != null) {
+      widget.value = payload[name];
+    }
   }
   renderAdvancedEditor(node);
 }

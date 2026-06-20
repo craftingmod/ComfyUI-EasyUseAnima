@@ -274,16 +274,24 @@ class PromptBuilderTests(unittest.TestCase):
         self.assertEqual(metadata_negative, negative)
         self.assertEqual((width, height), (1024, 1024))
 
-    def test_prompt_studio_advanced_drops_negative_naia_field(self):
+    def test_prompt_studio_advanced_keeps_one_naia_field_per_pane(self):
         fields = [
             {
-                "id": "bad",
+                "id": "negative_naia",
                 "pane": "negative",
                 "type": "naia",
                 "label": "NAIA Prompt",
                 "text": "bad prompt",
                 "height": 120,
-            }
+            },
+            {
+                "id": "negative_naia_duplicate",
+                "pane": "negative",
+                "type": "naia",
+                "label": "NAIA Prompt",
+                "text": "duplicate",
+                "height": 120,
+            },
         ]
         result = EasyUseAnimaPromptStudioAdvanced().build(
             False,
@@ -295,7 +303,8 @@ class PromptBuilderTests(unittest.TestCase):
 
         normalized = json.loads(result["ui"]["prompt_studio_advanced"][0]["advanced_fields"])
         self.assertEqual(normalized[0]["pane"], "negative")
-        self.assertEqual(normalized[0]["type"], "general")
+        self.assertEqual(normalized[0]["type"], "naia")
+        self.assertEqual(len([field for field in normalized if field["type"] == "naia"]), 1)
 
     def test_prompt_studio_advanced_disabled_field_is_skipped(self):
         fields = [
@@ -511,6 +520,111 @@ class PromptBuilderTests(unittest.TestCase):
         self.assertFalse(workflow_prompt["7"]["inputs"]["use_naia"])
         self.assertFalse(extra_pnginfo["workflow"]["nodes"][0]["widgets_values"][0])
         self.assertEqual(saved_image_fields[0]["text"], "1girl, silver hair")
+
+    def test_prompt_studio_advanced_uses_one_naia_request_for_fields_and_resolution(self):
+        fields = [
+            {
+                "id": "positive_naia",
+                "pane": "positive",
+                "type": "naia",
+                "label": "NAIA Prompt",
+                "text": "old positive",
+                "height": 120,
+                "enabled": True,
+            },
+            {
+                "id": "negative_naia",
+                "pane": "negative",
+                "type": "naia",
+                "label": "NAIA Prompt",
+                "text": "old negative",
+                "height": 120,
+                "enabled": True,
+            },
+        ]
+        workflow_prompt = {
+            "9": {
+                "inputs": {
+                    "use_naia": True,
+                    "advanced_fields": json.dumps(fields),
+                    "resolution_bucket": "NAIA",
+                }
+            }
+        }
+        extra_pnginfo = {
+            "workflow": {
+                "nodes": [
+                    {
+                        "id": 9,
+                        "widgets_values": [True, True, False, "NAIA", "", 1024, 1024, False, json.dumps(fields)],
+                    }
+                ]
+            }
+        }
+        settings = {
+            "host": "127.0.0.1",
+            "port": 8188,
+            "use_naia_settings": True,
+            "pre_prompt": "",
+            "post_prompt": "",
+            "auto_hide": "",
+            "preprocessing": {},
+        }
+        calls = []
+
+        def fake_post(host, port, body):
+            calls.append((host, port, body))
+            return {
+                "ok": True,
+                "prompt": "1girl, silver hair",
+                "negative_prompt": "low quality, bad hands",
+                "width": 1000,
+                "height": 777,
+            }
+
+        with (
+            patch("nodes.resolve_naia_settings", return_value=settings),
+            patch("nodes._post_random", fake_post),
+        ):
+            result = EasyUseAnimaPromptStudioAdvanced().build(
+                True,
+                True,
+                False,
+                False,
+                json.dumps(fields),
+                resolution_bucket="NAIA",
+                resolution_size="1024 * 1024 (1:1)",
+                resolution_custom_width=1024,
+                resolution_custom_height=1024,
+                workflow_prompt=workflow_prompt,
+                extra_pnginfo=extra_pnginfo,
+                unique_id="9",
+            )
+
+        payload = result["ui"]["prompt_studio_advanced"][0]
+        saved_fields = json.loads(payload["advanced_fields"])
+        saved_by_id = {field["id"]: field for field in saved_fields}
+        saved_image_fields = json.loads(extra_pnginfo["workflow"]["nodes"][0]["widgets_values"][8])
+        saved_image_by_id = {field["id"]: field for field in saved_image_fields}
+
+        self.assertEqual(len(calls), 1)
+        self.assertEqual(saved_by_id["positive_naia"]["text"], "1girl, silver hair")
+        self.assertEqual(saved_by_id["negative_naia"]["text"], "low quality, bad hands")
+        self.assertEqual(saved_image_by_id["negative_naia"]["text"], "low quality, bad hands")
+        self.assertEqual(result["result"][0], "1girl, silver hair")
+        self.assertEqual(result["result"][1], "low quality, bad hands")
+        self.assertEqual(result["result"][-2:], (992, 768))
+        self.assertFalse(workflow_prompt["9"]["inputs"]["use_naia"])
+        self.assertEqual(workflow_prompt["9"]["inputs"]["resolution_bucket"], "Custom")
+        self.assertEqual(workflow_prompt["9"]["inputs"]["resolution_custom_width"], 992)
+        self.assertEqual(workflow_prompt["9"]["inputs"]["resolution_custom_height"], 768)
+        self.assertEqual(payload["resolution_bucket"], "Custom")
+        self.assertEqual(payload["resolution_custom_width"], 992)
+        self.assertEqual(payload["resolution_custom_height"], 768)
+        self.assertFalse(extra_pnginfo["workflow"]["nodes"][0]["widgets_values"][0])
+        self.assertEqual(extra_pnginfo["workflow"]["nodes"][0]["widgets_values"][3], "Custom")
+        self.assertEqual(extra_pnginfo["workflow"]["nodes"][0]["widgets_values"][5], 992)
+        self.assertEqual(extra_pnginfo["workflow"]["nodes"][0]["widgets_values"][6], 768)
 
     def test_prompt_studio_advanced_outputs_selected_resolution(self):
         result = EasyUseAnimaPromptStudioAdvanced().build(

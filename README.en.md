@@ -141,7 +141,7 @@ Field model:
 - Positive and negative prompts are edited as separate field groups.
 - Fields can be added, removed, reordered, enabled, or disabled.
 - Supported positive field types are quality, artist, trigger, general, and
-  NAIA.
+  NAIA. Negative prompts also support one NAIA field.
 - Negative fields use the same prompt correction and metadata flow as positive
   fields where applicable.
 - The NAIA field stores the last NAIA result in the workflow and can be edited
@@ -158,10 +158,14 @@ Field model:
 - The `Custom` bucket stores editable width and height values in the workflow.
   Custom values are snapped to multiples of 32 so reloaded workflows keep a
   compatible latent size.
+- The `NAIA` bucket uses width and height from the same NAIA response that fills
+  prompt fields. Saved-image workflows store that resolved size as `Custom`.
 
 NAIA behavior:
 
 - `Fill from NAIA` keeps requesting fresh NAIA text while enabled.
+- Positive NAIA, negative NAIA, and NAIA resolution share one NAIA request per
+  queue execution.
 - Saved-image workflows store the filled text and turn the request flag off, so
   reloaded workflows reuse the saved result.
 - A setting can automatically disable general fields above the NAIA field while

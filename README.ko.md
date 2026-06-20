@@ -143,6 +143,7 @@ UI에서 편집하기 위한 기능을 추가한 버전입니다.
 - positive prompt와 negative prompt를 별도 field group으로 편집합니다.
 - field는 추가, 삭제, 순서 변경, 활성화, 비활성화할 수 있습니다.
 - positive field type은 quality, artist, trigger, general, NAIA를 지원합니다.
+  negative prompt에도 NAIA field를 1개 추가할 수 있습니다.
 - negative field도 가능한 범위에서 같은 prompt correction 및 metadata 흐름을
   사용합니다.
 - NAIA field는 마지막 NAIA 결과를 워크플로우에 저장하며, 채워진 뒤에도 직접
@@ -157,11 +158,16 @@ UI에서 편집하기 위한 기능을 추가한 버전입니다.
   `1280`, `1536`)을 따르며, 32배수 해상도만 노출합니다.
 - `Custom` bucket에서는 width와 height를 직접 입력할 수 있습니다. Custom
   값은 워크플로우에 저장되며, 호환성을 위해 32배수로 보정됩니다.
+- `NAIA` bucket은 prompt field를 채우는 것과 같은 NAIA 응답에서 width와
+  height를 가져옵니다. 저장 이미지 워크플로우에는 이 해상도를 `Custom`으로
+  저장합니다.
 
 NAIA 동작:
 
 - `Fill from NAIA`가 켜져 있으면 queue 실행 때마다 NAIA에서 새 프롬프트를
   받아 NAIA field를 채웁니다.
+- positive NAIA, negative NAIA, NAIA 해상도는 queue 1회당 NAIA 요청 1번만
+  공유해서 사용합니다.
 - 저장 이미지 워크플로우에는 채워진 텍스트를 저장하고 요청 flag를 off로
   저장합니다. 다시 불러온 워크플로우는 저장된 결과를 재사용합니다.
 - 설정에서 NAIA field 위쪽의 general field를 자동으로 off/on 하는 옵션을
