@@ -960,7 +960,51 @@ def _lora_combo_values() -> list[str]:
         names = [str(name) for name in folder_paths.get_filename_list("loras")]
     except Exception:
         names = []
-    return names or ["None"]
+    values = ["None"]
+    seen = {"none"}
+    for name in names:
+        text = str(name or "").strip()
+        if not text:
+            continue
+        key = text.casefold()
+        if key in seen:
+            continue
+        seen.add(key)
+        values.append(text)
+    return values
+
+
+def _lora_model_exists(lora_name: str) -> bool | None:
+    name = str(lora_name or "").strip()
+    if not name or name == "None":
+        return True
+
+    try:
+        import folder_paths  # type: ignore
+    except Exception:
+        return None
+
+    candidates = _dedupe_text_values((
+        name,
+        name.replace("\\", "/"),
+        name.replace("/", os.sep),
+    ))
+    for candidate in candidates:
+        if folder_paths.get_full_path("loras", candidate):
+            return True
+    return False
+
+
+def _raise_missing_loras(profile_index: int, missing_loras: list[str]):
+    if not missing_loras:
+        return
+    lines = "\n".join(f"- {name}" for name in missing_loras)
+    raise RuntimeError(
+        "[EasyUse Anima] LoRA Preset profile "
+        f"{profile_index} contains missing LoRA model(s):\n"
+        f"{lines}\n"
+        "Install the missing file under ComfyUI/models/loras or remove it from the profile."
+    )
 
 
 class EasyUseAnimaPromptCorrector:
@@ -1753,6 +1797,7 @@ class EasyUseAnimaLoraPreset:
                     "tooltip": "Internal profile count managed by the front-end profile buttons.",
                 }),
                 "lora_name": (_lora_combo_values(), {
+                    "default": "None",
                     "tooltip": "Internal LoRA selector source. Hidden by the EasyUse Anima front-end.",
                 }),
                 "loras": ("STRING", {
@@ -1817,6 +1862,7 @@ class EasyUseAnimaLoraPreset:
                 trigger_words.extend(existing_trigger_words)
 
         seen: set[tuple[str, float, float]] = set()
+        missing_loras: list[str] = []
         for lora in selected_loras:
             enabled_value = lora.get("on", lora.get("active", True))
             if not _as_bool(enabled_value, True):
@@ -1842,10 +1888,16 @@ class EasyUseAnimaLoraPreset:
                 continue
             seen.add(dedupe_key)
 
+            if _lora_model_exists(stack_lora_name) is False:
+                missing_loras.append(stack_lora_name)
+                continue
+
             _lora_path, lora_trigger_words = _get_lora_info(lora_name)
             stack.append((stack_lora_name, model_strength, clip_strength))
             trigger_words.extend(lora_trigger_words)
             active_loras.append((active_lora_name, model_strength, clip_strength))
+
+        _raise_missing_loras(selected_index, missing_loras)
 
         active_loras_text_parts = []
         for name, model_strength, clip_strength in active_loras:

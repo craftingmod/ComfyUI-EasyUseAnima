@@ -1,10 +1,12 @@
 import json
 import os
+import sys
 import tempfile
 import unittest
+from types import SimpleNamespace
 from unittest.mock import patch
 
-from nodes import EasyUseAnimaLoraPreset
+from nodes import EasyUseAnimaLoraPreset, _lora_combo_values
 
 
 def unwrap_result(response):
@@ -16,6 +18,23 @@ def unwrap_ui(response):
 
 
 class LoraPresetTests(unittest.TestCase):
+    def test_lora_combo_values_always_include_none_first(self):
+        folder_paths = SimpleNamespace(
+            get_filename_list=lambda _category: [
+                "style/foo.safetensors",
+                "None",
+                "style/bar.safetensors",
+            ]
+        )
+
+        with patch.dict(sys.modules, {"folder_paths": folder_paths}):
+            values = _lora_combo_values()
+
+        self.assertEqual(values[0], "None")
+        self.assertEqual(values.count("None"), 1)
+        self.assertIn("style/foo.safetensors", values)
+        self.assertIn("style/bar.safetensors", values)
+
     def test_build_wraps_profile_index_and_outputs_enabled_loras(self):
         profile_data = {
             "1": {"name": "One", "style_prompt": "style one", "loras": []},
@@ -124,6 +143,26 @@ class LoraPresetTests(unittest.TestCase):
         self.assertEqual(result[1], [])
         self.assertEqual(result[2], "")
         self.assertEqual(result[3], "")
+
+    def test_build_reports_missing_profile_lora_names(self):
+        loras = [
+            {"name": "style/missing_lora.safetensors", "on": True, "strength": 1.0},
+        ]
+
+        with patch("nodes._lora_model_exists", lambda _name: False):
+            with self.assertRaises(RuntimeError) as raised:
+                EasyUseAnimaLoraPreset().build(
+                    style_prompt="style",
+                    profile_index=1,
+                    profile_count=1,
+                    lora_name="None",
+                    loras=json.dumps(loras),
+                    profile_data="{}",
+                )
+
+        message = str(raised.exception)
+        self.assertIn("LoRA Preset profile 1", message)
+        self.assertIn("missing_lora.safetensors", message)
 
     def test_build_corrects_style_prompt_output(self):
         with patch("nodes._correct_style_prompt", lambda prompt: f"corrected: {prompt}"):
