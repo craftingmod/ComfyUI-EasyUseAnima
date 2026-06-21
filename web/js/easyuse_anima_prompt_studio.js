@@ -2862,6 +2862,18 @@ function measureAdvancedEditorHeight(editor) {
     return 0;
   }
   const rectHeight = Number(editor.getBoundingClientRect?.().height) || 0;
+  return Math.ceil(Math.max(
+    Number(editor.scrollHeight) || 0,
+    Number(editor.offsetHeight) || 0,
+    rectHeight,
+    measureAdvancedEditorContentHeight(editor),
+  ));
+}
+
+function measureAdvancedEditorContentHeight(editor) {
+  if (!editor) {
+    return 0;
+  }
   const editorRect = editor.getBoundingClientRect?.();
   const childrenBottom = editorRect
     ? [...editor.children].reduce((maxBottom, child) => {
@@ -2874,12 +2886,7 @@ function measureAdvancedEditorHeight(editor) {
       return Math.max(maxBottom, rect.bottom - editorRect.top + marginBottom);
     }, 0)
     : 0;
-  return Math.ceil(Math.max(
-    Number(editor.scrollHeight) || 0,
-    Number(editor.offsetHeight) || 0,
-    rectHeight,
-    childrenBottom,
-  ));
+  return Math.ceil(Math.max(childrenBottom, 0));
 }
 
 function advancedEditorTextareas(editor) {
@@ -2942,7 +2949,7 @@ function advancedTextareaHeightTotal(textareas, measure) {
 }
 
 function advancedEditorFixedHeight(editor, textareas = advancedEditorTextareas(editor)) {
-  const editorHeight = measureAdvancedEditorHeight(editor);
+  const editorHeight = measureAdvancedEditorContentHeight(editor);
   const textareaTotal = advancedTextareaHeightTotal(textareas, advancedTextareaCurrentHeight);
   return Math.max(0, editorHeight - textareaTotal);
 }
@@ -2964,7 +2971,7 @@ function advancedEditorWidget(node) {
     || null;
 }
 
-function advancedNodeChromeOffset(node, editorHeight = measureAdvancedEditorHeight(node?.__easyuseAnimaAdvancedEditorEl)) {
+function advancedNodeChromeOffset(node, editorHeight = measureAdvancedEditorContentHeight(node?.__easyuseAnimaAdvancedEditorEl)) {
   const computedHeight = Number(advancedBaseComputeSize(node)?.[1]) || 0;
   const computedOffset = computedHeight - (Number(editorHeight) || 0);
   const widget = advancedEditorWidget(node);
@@ -2973,6 +2980,40 @@ function advancedNodeChromeOffset(node, editorHeight = measureAdvancedEditorHeig
     Number(widget?.y) || 0,
   );
   return Math.ceil(Math.max(72, computedOffset, widgetY + 12));
+}
+
+function advancedMinimumNodeHeight(node) {
+  const editor = node?.__easyuseAnimaAdvancedEditorEl;
+  if (!editor) {
+    return 220;
+  }
+  const editorHeight = measureAdvancedEditorContentHeight(editor);
+  const chromeOffset = advancedNodeChromeOffset(node, editorHeight);
+  const computed = advancedBaseComputeSize(node);
+  return Math.ceil(Math.max(
+    220,
+    advancedEditorMinimumHeight(node) + chromeOffset,
+    Number(computed?.[1]) || 0,
+  ));
+}
+
+function clampAdvancedNodeToMinimumHeight(node) {
+  if (!node?.size || typeof node.setSize !== "function") {
+    return false;
+  }
+  const currentWidth = Number(node.size[0]) || 360;
+  const currentHeight = Number(node.size[1]) || 0;
+  const minimumHeight = advancedMinimumNodeHeight(node);
+  if (currentHeight >= minimumHeight - 1) {
+    return false;
+  }
+  node.__easyuseAnimaApplyingLayout = true;
+  try {
+    node.setSize([currentWidth, minimumHeight]);
+  } finally {
+    node.__easyuseAnimaApplyingLayout = false;
+  }
+  return true;
 }
 
 function advancedFieldByTextarea(node, textarea) {
@@ -3101,6 +3142,51 @@ function scheduleAdvancedResizeStateSync(node) {
   }, 160);
 }
 
+function clearAdvancedResizeEndListeners(node) {
+  const handler = node?.__easyuseAnimaAdvancedResizeEndHandler;
+  if (!handler) {
+    return;
+  }
+  document.removeEventListener("pointerup", handler, true);
+  document.removeEventListener("pointercancel", handler, true);
+  document.removeEventListener("mouseup", handler, true);
+  node.__easyuseAnimaAdvancedResizeEndHandler = null;
+}
+
+function finalizeAdvancedResize(node) {
+  if (!node?.__easyuseAnimaAdvancedEditorEl) {
+    return;
+  }
+  clearTimeout(node.__easyuseAnimaAdvancedResizeFinalizeTimer);
+  node.__easyuseAnimaAdvancedResizeFinalizeTimer = null;
+  clearAdvancedResizeEndListeners(node);
+  updateAdvancedEditorWidth(node);
+  clampAdvancedNodeToMinimumHeight(node);
+  scheduleAdvancedLayout(node, "resize");
+}
+
+function installAdvancedResizeEndListeners(node) {
+  if (!node || node.__easyuseAnimaAdvancedResizeEndHandler) {
+    return;
+  }
+  const handler = () => finalizeAdvancedResize(node);
+  node.__easyuseAnimaAdvancedResizeEndHandler = handler;
+  document.addEventListener("pointerup", handler, true);
+  document.addEventListener("pointercancel", handler, true);
+  document.addEventListener("mouseup", handler, true);
+}
+
+function scheduleAdvancedResizeFinalize(node) {
+  if (!node?.__easyuseAnimaAdvancedEditorEl) {
+    return;
+  }
+  installAdvancedResizeEndListeners(node);
+  clearTimeout(node.__easyuseAnimaAdvancedResizeFinalizeTimer);
+  node.__easyuseAnimaAdvancedResizeFinalizeTimer = setTimeout(() => {
+    finalizeAdvancedResize(node);
+  }, 120);
+}
+
 function updateAdvancedEditorWidth(node) {
   const editor = node?.__easyuseAnimaAdvancedEditorEl;
   if (!editor) {
@@ -3143,7 +3229,7 @@ function applyAdvancedLayout(node, reason = "layout") {
 
     const currentWidth = Number(node.size[0]) || 360;
     const currentHeight = Number(node.size[1]) || 0;
-    const initialEditorHeight = measureAdvancedEditorHeight(editor);
+    const initialEditorHeight = measureAdvancedEditorContentHeight(editor);
     const chromeOffset = advancedNodeChromeOffset(node, initialEditorHeight);
     const minEditorHeight = Math.max(0, currentHeight - chromeOffset);
     let resizedFields = false;
@@ -3159,7 +3245,7 @@ function applyAdvancedLayout(node, reason = "layout") {
     if (resizedFields && reason === "resize") {
       scheduleAdvancedResizeStateSync(node);
     }
-    const editorHeight = measureAdvancedEditorHeight(editor);
+    const editorHeight = measureAdvancedEditorContentHeight(editor);
     const afterComputed = advancedBaseComputeSize(node);
     const minEditorContentHeight = advancedEditorMinimumHeight(node);
     const minimumHeight = Math.max(
@@ -3835,7 +3921,8 @@ app.registerExtension({
         if (nodeData.name === ADVANCED_NODE_TYPE) {
           removeAdvancedInternalInputSockets(this);
           updateAdvancedEditorWidth(this);
-          scheduleAdvancedLayout(this, "resize");
+          clampAdvancedNodeToMinimumHeight(this);
+          scheduleAdvancedResizeFinalize(this);
           return result;
         }
         if (isExtendNode(this)) {
