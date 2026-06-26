@@ -62,6 +62,7 @@ _COMMENT_RE = re.compile(r"(?://[^\n]*|/\*(?:[^*]|\*(?!/))*\*/|#[^\n]*)")
 @dataclass(frozen=True)
 class AutocompleteEntry:
     tag: str
+    tag_key: str
     category: str
     count: int
     description: str
@@ -147,8 +148,10 @@ def _entry_from_parts(tag: str, category: str, count: str, description: str) -> 
     description = _display_description(description)
     category = _category_from_description(category, description)
     search = _normalize(" ".join((tag, description)))
+    tag_key = _normalize(tag)
     return AutocompleteEntry(
         tag=tag,
+        tag_key=tag_key,
         category=category,
         count=count_value,
         description=description,
@@ -163,17 +166,17 @@ def _looks_like_header(row: list[str]) -> bool:
     )
 
 
-def _load_entries(path: Path = AUTOCOMPLETE_CSV) -> list[AutocompleteEntry]:
+def _load_entries(path: Path = AUTOCOMPLETE_CSV) -> tuple[AutocompleteEntry, ...]:
     entries: list[AutocompleteEntry] = []
     if not path.is_file():
-        return entries
+        return ()
 
     with path.open("r", encoding="utf-8-sig", newline="") as handle:
         reader = csv.reader(handle)
         rows = iter(reader)
         first_row = next(rows, None)
         if first_row is None:
-            return entries
+            return ()
 
         if _looks_like_header(first_row):
             fieldnames = [str(column or "").strip() for column in first_row]
@@ -195,21 +198,17 @@ def _load_entries(path: Path = AUTOCOMPLETE_CSV) -> list[AutocompleteEntry]:
                 if entry:
                     entries.append(entry)
     entries.sort(key=lambda entry: entry.count, reverse=True)
-    return entries
+    return tuple(entries)
 
 
-def _entries(path: Path = AUTOCOMPLETE_CSV) -> list[AutocompleteEntry]:
-    mtime = path.stat().st_mtime if path.is_file() else 0
-    if (
-        _CACHE["entries"] is None
-        or _CACHE["path"] != str(path)
-        or _CACHE["mtime"] != mtime
-    ):
+def _entries(path: Path = AUTOCOMPLETE_CSV) -> tuple[AutocompleteEntry, ...]:
+    if _CACHE["entries"] is None or _CACHE["path"] != str(path):
+        mtime = path.stat().st_mtime if path.is_file() else 0
         _CACHE["path"] = str(path)
         _CACHE["mtime"] = mtime
         _CACHE["entries"] = _load_entries(path)
         _CACHE["entry_map"] = None
-    return list(_CACHE["entries"] or [])
+    return _CACHE["entries"] or ()
 
 
 def _entry_map(path: Path = AUTOCOMPLETE_CSV) -> dict[str, AutocompleteEntry]:
@@ -429,7 +428,7 @@ def search_autocomplete(
     for entry in _entries(path):
         if categories and entry.category not in categories:
             continue
-        tag_key = _normalize(entry.tag)
+        tag_key = entry.tag_key
         if tag_key == normalized_query:
             score = 0
         elif tag_key.startswith(normalized_query):
