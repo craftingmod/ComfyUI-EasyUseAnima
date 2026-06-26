@@ -57,7 +57,7 @@ _COUNT_RE = re.compile(
 )
 _WEIGHTED_TOKEN_RE = re.compile(r"^\((.*):[-+]?\d+(?:\.\d+)?\)$")
 _DESCRIPTION_PREFIX_RE = re.compile(r"^\[([^\]]+)\]")
-
+_COMMENT_RE = re.compile(r"(?://[^\n]*|/\*(?:[^*]|\*(?!/))*\*/|#[^\n]*)")
 
 @dataclass(frozen=True)
 class AutocompleteEntry:
@@ -286,6 +286,10 @@ def _classification_tokens(token: str) -> list[tuple[str, bool, bool]]:
 
 
 def _token_section(token: str, entry: AutocompleteEntry | None) -> tuple[str, str]:
+    trimmed_token = token.strip()
+    if trimmed_token.startswith("//") or trimmed_token.startswith("#") or (trimmed_token.startswith("/*") and trimmed_token.endswith("*/")):
+        return ("comment", "주석")
+
     base = _token_base(token)
     is_artist_request = _is_artist_request(token)
     if _COUNT_RE.match(_normalize(base)):
@@ -331,12 +335,30 @@ def _token_section(token: str, entry: AutocompleteEntry | None) -> tuple[str, st
 def classify_prompt_text(text: str, limit: int = 240, path: Path = AUTOCOMPLETE_CSV) -> dict:
     entries = _entry_map(path)
     tokens: list[tuple[str, bool, bool]] = []
-    normalized = str(text or "").replace("\r\n", "\n").replace("\r", "\n")
-    normalized = normalized.replace("，", ",").replace("\n", ",")
-    for token in parse_prompt(normalized, profile="prompt").tokens:
-        tokens.extend(_classification_tokens(token))
-        if len(tokens) >= max(1, min(limit, 500)):
-            tokens = tokens[: max(1, min(limit, 500))]
+
+    last_idx = 0
+    chunks = []
+    for match in _COMMENT_RE.finditer(text or ""):
+        start, end = match.span()
+        if start > last_idx:
+            chunks.append((text[last_idx:start], False))
+        chunks.append((text[start:end], True))
+        last_idx = end
+    if last_idx < len(text or ""):
+        chunks.append((text[last_idx:], False))
+
+    for chunk_text, is_comment in chunks:
+        if is_comment:
+            tokens.append((chunk_text, False, False))
+        else:
+            normalized = str(chunk_text).replace("\r\n", "\n").replace("\r", "\n")
+            normalized = normalized.replace("，", ",").replace("\n", ",")
+            for token in parse_prompt(normalized, profile="prompt").tokens:
+                tokens.extend(_classification_tokens(token))
+
+        max_limit = max(1, min(limit, 500))
+        if len(tokens) >= max_limit:
+            tokens = tokens[:max_limit]
             break
 
     classified = []
