@@ -56,21 +56,21 @@ const PROMPT_STUDIO_COLOR_DEFAULTS = {
 };
 
 const NAIA_PREPROCESSING_OPTIONS = [
-  ["remove_author", "Remove author"],
-  ["remove_work_title", "Remove work title"],
-  ["remove_character_name", "Remove character name"],
-  ["remove_character_features", "Remove character features"],
-  ["remove_clothes", "Remove clothes"],
-  ["remove_color", "Remove color"],
-  ["remove_location_and_background_color", "Remove location/background color"],
-  ["remove_expression", "Remove expression"],
-  ["remove_pose_action", "Remove pose/action"],
-  ["remove_meta_tags", "Remove meta tags"],
-  ["remove_object_tags", "Remove object tags"],
-  ["remove_noise_tags", "Remove noise tags"],
-  ["e621_auto_boost", "e621 auto boost"],
-  ["danbooru_auto_weight", "Danbooru auto weight"],
-  ["tag_implication_compression", "Tag implication compression"],
+  ["remove_author", { en: "Remove author", ko: "작가 제거" }],
+  ["remove_work_title", { en: "Remove work title", ko: "작품명 제거" }],
+  ["remove_character_name", { en: "Remove character name", ko: "캐릭터명 제거" }],
+  ["remove_character_features", { en: "Remove character features", ko: "캐릭터 특징 제거" }],
+  ["remove_clothes", { en: "Remove clothes", ko: "의상 제거" }],
+  ["remove_color", { en: "Remove color", ko: "색상 제거" }],
+  ["remove_location_and_background_color", { en: "Remove location/background color", ko: "장소/배경색 제거" }],
+  ["remove_expression", { en: "Remove expression", ko: "표정 제거" }],
+  ["remove_pose_action", { en: "Remove pose/action", ko: "포즈/동작 제거" }],
+  ["remove_meta_tags", { en: "Remove meta tags", ko: "메타 태그 제거" }],
+  ["remove_object_tags", { en: "Remove object tags", ko: "오브젝트 태그 제거" }],
+  ["remove_noise_tags", { en: "Remove noise tags", ko: "노이즈 태그 제거" }],
+  ["e621_auto_boost", { en: "e621 auto boost", ko: "e621 자동 강화" }],
+  ["danbooru_auto_weight", { en: "Danbooru auto weight", ko: "Danbooru 자동 가중치" }],
+  ["tag_implication_compression", { en: "Tag implication compression", ko: "태그 함의 압축" }],
 ];
 
 const SETTINGS_PANEL_STYLE =
@@ -91,11 +91,21 @@ const SETTINGS_TEXT = {
     saved: "Saved automatically",
     current: "Current",
     saveFailed: "Save failed",
-    languageTitle: "Settings language",
-    languageGuide: "Controls labels inside EasyUse Anima settings panels. The ComfyUI settings list itself may need a browser refresh.",
-    languageLabel: "Language",
-    english: "English",
-    korean: "Korean",
+    on: "on",
+    off: "off",
+    settingsPromptSectionName: "EasyUse Anima: Prompt",
+    settingsPromptMetadataName: "EasyUse Anima: Metadata Prompt Filter",
+    settingsPromptMetadataTooltip: "Remove these tags only from Anima Prompt Builder metadata_prompt.",
+    settingsAutocompleteCsvName: "EasyUse Anima: Autocomplete CSV",
+    settingsAutocompleteCsvTooltip: "Select which bundled Korean Danbooru CSV powers autocomplete and tag highlighting.",
+    settingsPromptStudioName: "EasyUse Anima: Prompt Studio Highlighting",
+    settingsPromptStudioTooltip: "Configure Prompt Studio typo indicators and tag highlight colors.",
+    settingsLoraSectionName: "EasyUse Anima: LoRA Preset",
+    settingsLoraDisplayName: "EasyUse Anima: LoRA Preset Display",
+    settingsLoraDisplayTooltip: "Choose whether LoRA preset rows show only filenames or full relative paths.",
+    settingsNaiaSectionName: "EasyUse Anima: NAIA",
+    settingsNaiaName: "EasyUse Anima: NAIA Settings",
+    settingsNaiaTooltip: "Configure NAIA host, port, Prompt Engineering override, and preprocessing options.",
     promptMetadataTitle: "Prompt metadata",
     promptMetadataGuide: "Controls that affect generated prompt text or metadata-only output.",
     metadataFilterGuide: "Comma- or newline-separated prompt tags to remove only from Anima Prompt Builder metadata_prompt. The normal prompt output is not filtered.",
@@ -120,6 +130,21 @@ const SETTINGS_TEXT = {
     preprocessingOverrides: "preprocessing overrides",
     set: "set",
     empty: "empty",
+    autocompleteGuide: "Choose which bundled CSV is used for tag autocomplete and Prompt Studio tag highlighting. Korean searches use the selected CSV description text.",
+    suggestions: "Suggestions",
+    autocompleteReady: "Autocomplete CSV is ready",
+    autocompleteMissing: "Selected autocomplete CSV is missing.",
+    selected: "Selected",
+    selectedCsv: "selected CSV",
+    tagCount: "Tag count",
+    path: "Path",
+    source: "Source",
+    refreshAutocompleteStatus: "Refresh Autocomplete Status",
+    autocompleteStatusFailed: "Could not read autocomplete CSV status",
+    missing: "missing",
+    prePrompt: "Pre prompt",
+    postPrompt: "Post prompt",
+    autoHide: "Auto hide",
   },
   ko: {
     autoSave: "자동 저장 사용 중",
@@ -127,11 +152,21 @@ const SETTINGS_TEXT = {
     saved: "자동 저장됨",
     current: "현재",
     saveFailed: "저장 실패",
-    languageTitle: "설정 언어",
-    languageGuide: "EasyUse Anima 설정 패널 내부 라벨 언어를 바꿉니다. ComfyUI 설정 목록 이름은 브라우저 새로고침이 필요할 수 있습니다.",
-    languageLabel: "언어",
-    english: "영어",
-    korean: "한국어",
+    on: "켜짐",
+    off: "꺼짐",
+    settingsPromptSectionName: "EasyUse Anima: 프롬프트",
+    settingsPromptMetadataName: "EasyUse Anima: Metadata Prompt 필터",
+    settingsPromptMetadataTooltip: "Anima Prompt Builder metadata_prompt에서만 지정 태그를 제거합니다.",
+    settingsAutocompleteCsvName: "EasyUse Anima: 자동완성 CSV",
+    settingsAutocompleteCsvTooltip: "자동완성과 태그 하이라이트에 사용할 한국어 Danbooru CSV를 선택합니다.",
+    settingsPromptStudioName: "EasyUse Anima: Prompt Studio 하이라이트",
+    settingsPromptStudioTooltip: "Prompt Studio 오타 표시와 태그 하이라이트 색상을 설정합니다.",
+    settingsLoraSectionName: "EasyUse Anima: LoRA 프리셋",
+    settingsLoraDisplayName: "EasyUse Anima: LoRA 프리셋 표시",
+    settingsLoraDisplayTooltip: "LoRA 프리셋 행에 파일명만 표시할지 상대 경로를 표시할지 선택합니다.",
+    settingsNaiaSectionName: "EasyUse Anima: NAIA",
+    settingsNaiaName: "EasyUse Anima: NAIA 설정",
+    settingsNaiaTooltip: "NAIA host, port, Prompt Engineering override, 전처리 옵션을 설정합니다.",
     promptMetadataTitle: "프롬프트 메타데이터",
     promptMetadataGuide: "생성 프롬프트 텍스트 또는 metadata 전용 출력에 영향을 주는 설정입니다.",
     metadataFilterGuide: "Anima Prompt Builder metadata_prompt에서만 제거할 태그를 쉼표나 줄바꿈으로 입력합니다. 일반 prompt 출력에는 적용되지 않습니다.",
@@ -156,6 +191,21 @@ const SETTINGS_TEXT = {
     preprocessingOverrides: "전처리 override",
     set: "입력됨",
     empty: "비어 있음",
+    autocompleteGuide: "태그 자동완성과 Prompt Studio 태그 하이라이트에 사용할 내장 CSV를 선택합니다. 한국어 검색은 선택한 CSV의 설명 텍스트를 사용합니다.",
+    suggestions: "추천 수",
+    autocompleteReady: "자동완성 CSV 준비됨",
+    autocompleteMissing: "선택한 자동완성 CSV가 없습니다.",
+    selected: "선택됨",
+    selectedCsv: "선택된 CSV",
+    tagCount: "태그 수",
+    path: "경로",
+    source: "출처",
+    refreshAutocompleteStatus: "자동완성 상태 새로고침",
+    autocompleteStatusFailed: "자동완성 CSV 상태를 읽을 수 없음",
+    missing: "없음",
+    prePrompt: "Pre prompt",
+    postPrompt: "Post prompt",
+    autoHide: "Auto hide",
   },
 };
 
@@ -166,9 +216,82 @@ function currentSettings(settings = {}) {
   };
 }
 
-function settingsLanguage(settings = {}) {
-  const language = String(currentSettings(settings)["ui.language"] || "en").toLowerCase();
-  return language === "ko" ? "ko" : "en";
+const COMFY_LANGUAGE_SETTING_KEYS = [
+  "Comfy.Locale",
+  "Comfy.Locale.Language",
+  "Comfy.Language",
+  "ComfyUI.Locale",
+  "ComfyUI.Language",
+  "locale",
+  "language",
+];
+
+function settingValueFromObject(container, key) {
+  const entry = container?.[key];
+  if (entry == null) {
+    return undefined;
+  }
+  if (typeof entry === "object" && "value" in entry) {
+    return entry.value;
+  }
+  return entry;
+}
+
+function readComfySettingValue(key) {
+  try {
+    const getter = app?.ui?.settings?.getSettingValue;
+    if (typeof getter === "function") {
+      const value = getter.call(app.ui.settings, key);
+      if (value != null && typeof value !== "object") {
+        return value;
+      }
+      if (value && "value" in value) {
+        return value.value;
+      }
+    }
+  } catch {}
+
+  for (const container of [
+    app?.ui?.settings?.settings,
+    app?.ui?.settings?._settings,
+    app?.ui?.settings?.settingValues,
+    window?.comfyAPI?.settings,
+  ]) {
+    const value = settingValueFromObject(container, key);
+    if (value != null) {
+      return value;
+    }
+  }
+
+  if (key.toLowerCase().includes("comfy")) {
+    try {
+      const value = localStorage.getItem(key);
+      if (value != null) {
+        return value;
+      }
+    } catch {}
+  }
+
+  return undefined;
+}
+
+function readComfyLanguage() {
+  for (const key of COMFY_LANGUAGE_SETTING_KEYS) {
+    const value = readComfySettingValue(key);
+    if (value != null && String(value).trim()) {
+      return String(value);
+    }
+  }
+  return "";
+}
+
+function isKoreanLanguage(value) {
+  const normalized = String(value || "").trim().replace(/^["']|["']$/g, "").toLowerCase().replace("_", "-");
+  return normalized === "ko" || normalized.startsWith("ko-") || normalized.includes("korean") || normalized.includes("한국어");
+}
+
+function settingsLanguage(_settings = {}) {
+  return isKoreanLanguage(readComfyLanguage()) ? "ko" : "en";
 }
 
 function textFor(settings, key) {
@@ -208,8 +331,8 @@ function setStatus(status, text, color = "") {
   status.style.color = color;
 }
 
-function formatOnOff(value) {
-  return value ? "on" : "off";
+function formatOnOff(value, settings = {}) {
+  return value ? textFor(settings, "on") : textFor(settings, "off");
 }
 
 function updateSettingCache(key, value) {
@@ -269,54 +392,6 @@ function sectionHeader(title, description) {
     container.append(text);
   }
 
-  return container;
-}
-
-function languageEditor(settings = {}) {
-  settings = currentSettings(settings);
-  const container = document.createElement("div");
-  container.style.cssText = SETTINGS_PANEL_STYLE;
-
-  const guide = document.createElement("div");
-  guide.textContent = textFor(settings, "languageGuide");
-  guide.style.cssText = "opacity: 0.78;";
-  container.append(guide);
-
-  const row = document.createElement("div");
-  row.style.cssText = SETTINGS_ROW_STYLE;
-  const label = document.createElement("label");
-  label.style.cssText = SETTINGS_FIELD_STYLE;
-  const text = document.createElement("span");
-  text.textContent = textFor(settings, "languageLabel");
-  const select = document.createElement("select");
-  select.style.cssText = SETTINGS_INPUT_STYLE;
-  for (const [value, labelText] of [
-    ["en", textFor(settings, "english")],
-    ["ko", textFor(settings, "korean")],
-  ]) {
-    const option = document.createElement("option");
-    option.value = value;
-    option.textContent = labelText;
-    option.selected = settingsLanguage(settings) === value;
-    select.append(option);
-  }
-  label.append(text, select);
-
-  const current = currentValue("");
-  const status = document.createElement("span");
-  status.style.cssText = SETTINGS_STATUS_STYLE;
-  const refreshCurrent = () => {
-    current.textContent = `${textFor(settings, "current")}: ${select.selectedOptions[0]?.textContent || select.value}`;
-  };
-  refreshCurrent();
-  select.addEventListener("change", () => {
-    updateSettingCache("ui.language", select.value);
-    refreshCurrent();
-    saveSettingAndNotify("ui.language", select.value, status).catch(() => {});
-  });
-
-  row.append(label, status);
-  container.append(row, current);
   return container;
 }
 
@@ -442,8 +517,8 @@ function promptStudioEditor(settings = {}) {
 
   const refreshCurrent = () => {
     current.textContent =
-      `${textFor(settings, "current")}: typo ${formatOnOff(typoToggle.checked)}, ` +
-      `NAIA general auto-toggle ${formatOnOff(naiaGeneralToggle.checked)}`;
+      `${textFor(settings, "current")}: typo ${formatOnOff(typoToggle.checked, settings)}, ` +
+      `NAIA general auto-toggle ${formatOnOff(naiaGeneralToggle.checked, settings)}`;
   };
 
   const saveColors = () => {
@@ -580,9 +655,9 @@ function naiaSettingsEditor(settings = {}) {
   textStack.style.cssText = "display: flex; flex-direction: column; gap: 6px; width: 100%;";
   const promptInputs = new Map();
   for (const [key, labelText] of [
-    ["pre_prompt", "Pre prompt"],
-    ["post_prompt", "Post prompt"],
-    ["auto_hide", "Auto hide"],
+    ["pre_prompt", textFor(settings, "prePrompt")],
+    ["post_prompt", textFor(settings, "postPrompt")],
+    ["auto_hide", textFor(settings, "autoHide")],
   ]) {
     const label = document.createElement("label");
     label.style.cssText = "display: grid; grid-template-columns: 94px minmax(0, 1fr); align-items: center; gap: 8px;";
@@ -612,7 +687,7 @@ function naiaSettingsEditor(settings = {}) {
     label.style.cssText =
       "display: grid; grid-template-columns: minmax(0, 1fr) 68px; align-items: center; gap: 7px; font-size: 0.92em;";
     const text = document.createElement("span");
-    text.textContent = labelText;
+    text.textContent = labelText?.[settingsLanguage(settings)] || labelText?.en || String(labelText || key);
     text.style.cssText = "min-width: 0;";
     const select = document.createElement("select");
     select.style.cssText = "width: 68px; padding: 3px 4px;";
@@ -648,7 +723,7 @@ function naiaSettingsEditor(settings = {}) {
     const overrideCount = [...preprocessingSelects.values()].filter((select) => select.value !== "skip").length;
     current.textContent =
       `${textFor(settings, "current")}: ${hostInput.value.trim() || "127.0.0.1"}:${portInput.value || "7243"}, ` +
-      `${textFor(settings, "desktopSettings")} ${formatOnOff(useSettingsToggle.checked)}, ` +
+      `${textFor(settings, "desktopSettings")} ${formatOnOff(useSettingsToggle.checked, settings)}, ` +
       `${promptState}, ${textFor(settings, "preprocessingOverrides")} ${overrideCount}`;
   };
   refreshCurrent();
@@ -698,6 +773,7 @@ function naiaSettingsEditor(settings = {}) {
 }
 
 function autocompleteDatasetSelector(initialValue = {}) {
+  const settings = currentSettings();
   const initialSource =
     typeof initialValue === "object" && initialValue !== null
       ? initialValue.source || ""
@@ -710,8 +786,7 @@ function autocompleteDatasetSelector(initialValue = {}) {
   container.style.cssText = SETTINGS_PANEL_STYLE;
 
   const guide = document.createElement("div");
-  guide.textContent =
-    "Choose which bundled CSV is used for tag autocomplete and Prompt Studio tag highlighting. Korean searches use the selected CSV description text.";
+  guide.textContent = textFor(settings, "autocompleteGuide");
   guide.style.cssText = "opacity: 0.78;";
   container.append(guide);
 
@@ -724,7 +799,7 @@ function autocompleteDatasetSelector(initialValue = {}) {
   const limitLabel = document.createElement("label");
   limitLabel.style.cssText = "display: flex; align-items: center; gap: 6px;";
   const limitText = document.createElement("span");
-  limitText.textContent = "Suggestions";
+  limitText.textContent = textFor(settings, "suggestions");
   const limitInput = document.createElement("input");
   limitInput.type = "number";
   limitInput.min = "1";
@@ -752,7 +827,7 @@ function autocompleteDatasetSelector(initialValue = {}) {
     for (const source of sources) {
       const option = document.createElement("option");
       option.value = source.key;
-      option.textContent = source.exists ? source.label : `${source.label} (missing)`;
+      option.textContent = source.exists ? source.label : `${source.label} (${textFor(settings, "missing")})`;
       option.selected = source.key === selected;
       select.append(option);
     }
@@ -764,7 +839,7 @@ function autocompleteDatasetSelector(initialValue = {}) {
       renderOptions(status);
       renderAutocompletePanel(panel, status);
     } catch (error) {
-      panel.textContent = `Could not read autocomplete CSV status: ${error.message || error}`;
+      panel.textContent = `${textFor(settings, "autocompleteStatusFailed")}: ${error.message || error}`;
     }
   };
 
@@ -772,17 +847,17 @@ function autocompleteDatasetSelector(initialValue = {}) {
     try {
       const limit = Math.max(1, Math.min(100, Number.parseInt(limitInput.value || "20", 10) || 20));
       limitInput.value = String(limit);
-      setStatus(message, "Saving...", "#64748b");
+      setStatus(message, textFor(settings, "saving"), "#64748b");
       await saveSetting("autocomplete.source", select.value);
       const data = await saveSetting("autocomplete.limit", String(limit));
       updateSettingCache("autocomplete.source", select.value);
       updateSettingCache("autocomplete.limit", String(limit));
-      setStatus(message, "Saved automatically", "#16a34a");
+      setStatus(message, textFor(settings, "saved"), "#16a34a");
       renderOptions({ sources: panel._easyuseSources || [], source: data["autocomplete.source"] });
       window.dispatchEvent(new CustomEvent("easyuse-anima-settings-updated", { detail: data }));
       await refreshAutocompletePanels();
     } catch (error) {
-      setStatus(message, `Save failed: ${error.message || error}`, "#dc2626");
+      setStatus(message, `${textFor(settings, "saveFailed")}: ${error.message || error}`, "#dc2626");
     }
   };
 
@@ -816,40 +891,42 @@ function appendPathLine(container, label, value) {
 }
 
 function renderAutocompletePanel(panel, status) {
+  const settings = currentSettings();
   panel.replaceChildren();
   panel._easyuseSources = Array.isArray(status.sources) ? status.sources : [];
 
   const selected = panel._easyuseSources.find((source) => source.key === status.source);
   const banner = document.createElement("div");
   banner.textContent = status.exists
-    ? `Autocomplete CSV is ready: ${selected?.label || status.source || "selected CSV"}`
-    : "Selected autocomplete CSV is missing.";
+    ? `${textFor(settings, "autocompleteReady")}: ${selected?.label || status.source || textFor(settings, "selectedCsv")}`
+    : textFor(settings, "autocompleteMissing");
   banner.style.cssText = status.exists
     ? "margin: 8px 0; padding: 8px 10px; border-radius: 6px; background: rgba(22, 163, 74, 0.16); color: #16a34a; font-weight: 700;"
     : "margin: 8px 0; padding: 8px 10px; border-radius: 6px; background: rgba(220, 38, 38, 0.14); color: #dc2626; font-weight: 700;";
   panel.append(banner);
 
-  appendLine(panel, "Selected", selected?.label || status.source || "");
-  appendLine(panel, "Tag count", Number(status.count || 0).toLocaleString());
-  appendPathLine(panel, "Path", status.path || "");
+  appendLine(panel, textFor(settings, "selected"), selected?.label || status.source || "");
+  appendLine(panel, textFor(settings, "tagCount"), Number(status.count || 0).toLocaleString());
+  appendPathLine(panel, textFor(settings, "path"), status.path || "");
 
   if (selected?.source) {
-    appendLine(panel, "Source", selected.source, "opacity: 0.72; font-weight: 400;");
+    appendLine(panel, textFor(settings, "source"), selected.source, "opacity: 0.72; font-weight: 400;");
   }
 
   const refresh = document.createElement("button");
-  refresh.textContent = "Refresh Autocomplete Status";
+  refresh.textContent = textFor(settings, "refreshAutocompleteStatus");
   refresh.style.cssText = "margin-top: 8px; padding: 4px 10px; cursor: pointer;";
   refresh.onclick = () => refreshAutocompletePanel(panel);
   panel.append(refresh);
 }
 
 async function refreshAutocompletePanel(panel) {
+  const settings = currentSettings();
   try {
     const status = await getAutocompleteStatus();
     renderAutocompletePanel(panel, status);
   } catch (error) {
-    panel.textContent = `Could not read autocomplete CSV status: ${error.message || error}`;
+    panel.textContent = `${textFor(settings, "autocompleteStatusFailed")}: ${error.message || error}`;
   }
 }
 
@@ -865,15 +942,8 @@ app.registerExtension({
     const latestSettings = () => currentSettings(settings);
 
     app.ui.settings.addSetting({
-      id: "EasyUseAnima.UI.Language",
-      name: "EasyUse Anima: Settings Language",
-      type: () => languageEditor(latestSettings()),
-      tooltip: "Choose English or Korean labels inside EasyUse Anima settings panels.",
-    });
-
-    app.ui.settings.addSetting({
       id: "EasyUseAnima.Section.Prompt",
-      name: "EasyUse Anima: Prompt",
+      name: textFor(latestSettings(), "settingsPromptSectionName"),
       type: () => sectionHeader(
         textFor(latestSettings(), "promptMetadataTitle"),
         textFor(latestSettings(), "promptMetadataGuide"),
@@ -882,31 +952,31 @@ app.registerExtension({
 
     app.ui.settings.addSetting({
       id: "EasyUseAnima.Prompt.MetadataFilter",
-      name: "EasyUse Anima: Metadata Prompt Filter",
+      name: textFor(latestSettings(), "settingsPromptMetadataName"),
       type: () => metadataFilterEditor(latestSettings()["prompt.metadata_filter_words"] || ""),
-      tooltip: "Remove these tags only from Anima Prompt Builder metadata_prompt.",
+      tooltip: textFor(latestSettings(), "settingsPromptMetadataTooltip"),
     });
 
     app.ui.settings.addSetting({
       id: "EasyUseAnima.Prompt.AutocompleteCsv",
-      name: "EasyUse Anima: Autocomplete CSV",
+      name: textFor(latestSettings(), "settingsAutocompleteCsvName"),
       type: () => autocompleteDatasetSelector({
         source: latestSettings()["autocomplete.source"] || "",
         limit: latestSettings()["autocomplete.limit"] || 20,
       }),
-      tooltip: "Select which bundled Korean Danbooru CSV powers autocomplete and tag highlighting.",
+      tooltip: textFor(latestSettings(), "settingsAutocompleteCsvTooltip"),
     });
 
     app.ui.settings.addSetting({
       id: "EasyUseAnima.Prompt.PromptStudio",
-      name: "EasyUse Anima: Prompt Studio Highlighting",
+      name: textFor(latestSettings(), "settingsPromptStudioName"),
       type: () => promptStudioEditor(latestSettings()),
-      tooltip: "Configure Prompt Studio typo indicators and tag highlight colors.",
+      tooltip: textFor(latestSettings(), "settingsPromptStudioTooltip"),
     });
 
     app.ui.settings.addSetting({
       id: "EasyUseAnima.Section.LoraPreset",
-      name: "EasyUse Anima: LoRA Preset",
+      name: textFor(latestSettings(), "settingsLoraSectionName"),
       type: () => sectionHeader(
         textFor(latestSettings(), "loraPresetTitle"),
         textFor(latestSettings(), "loraPresetGuide"),
@@ -915,14 +985,14 @@ app.registerExtension({
 
     app.ui.settings.addSetting({
       id: "EasyUseAnima.LoraPreset.Display",
-      name: "EasyUse Anima: LoRA Preset Display",
+      name: textFor(latestSettings(), "settingsLoraDisplayName"),
       type: () => loraPresetEditor(latestSettings()),
-      tooltip: "Choose whether LoRA preset rows show only filenames or full relative paths.",
+      tooltip: textFor(latestSettings(), "settingsLoraDisplayTooltip"),
     });
 
     app.ui.settings.addSetting({
       id: "EasyUseAnima.Section.NAIA",
-      name: "EasyUse Anima: NAIA",
+      name: textFor(latestSettings(), "settingsNaiaSectionName"),
       type: () => sectionHeader(
         textFor(latestSettings(), "naiaBridgeTitle"),
         textFor(latestSettings(), "naiaBridgeGuide"),
@@ -931,9 +1001,9 @@ app.registerExtension({
 
     app.ui.settings.addSetting({
       id: "EasyUseAnima.NAIA.Settings",
-      name: "EasyUse Anima: NAIA Settings",
+      name: textFor(latestSettings(), "settingsNaiaName"),
       type: () => naiaSettingsEditor(latestSettings()),
-      tooltip: "Configure NAIA host, port, Prompt Engineering override, and preprocessing options.",
+      tooltip: textFor(latestSettings(), "settingsNaiaTooltip"),
     });
 
   },
