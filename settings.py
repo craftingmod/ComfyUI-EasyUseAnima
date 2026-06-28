@@ -13,6 +13,7 @@ DEFAULT_SETTINGS = {
     "prompt.metadata_filter_words": "",
     "autocomplete.source": "localsmile_kr_wiki",
     "autocomplete.limit": "20",
+    "autocomplete.mode": "compatible_global",
     "lora_preset.name_display": "name",
     "prompt_studio.typo_indicator": "true",
     "prompt_studio.colors": "",
@@ -38,6 +39,12 @@ DEFAULT_SETTINGS = {
     "naia.e621_auto_boost": "skip",
     "naia.danbooru_auto_weight": "skip",
     "naia.tag_implication_compression": "skip",
+}
+
+AUTOCOMPLETE_MODES = {
+    "off",
+    "easyuse_nodes",
+    "compatible_global",
 }
 
 NAIA_PREPROCESSING_KEYS = [
@@ -96,6 +103,7 @@ def public_settings() -> dict:
             DEFAULT_SETTINGS["autocomplete.source"],
         ),
         "autocomplete.limit": resolve_autocomplete_limit(settings),
+        "autocomplete.mode": resolve_autocomplete_mode(settings),
         "lora_preset.name_display": settings.get(
             "lora_preset.name_display",
             DEFAULT_SETTINGS["lora_preset.name_display"],
@@ -148,6 +156,17 @@ def resolve_autocomplete_limit(settings: dict | None = None) -> int:
     except (TypeError, ValueError):
         value = int(DEFAULT_SETTINGS["autocomplete.limit"])
     return max(1, min(100, value))
+
+
+def resolve_autocomplete_mode(settings: dict | None = None) -> str:
+    settings = settings or get_settings()
+    value = str(
+        settings.get("autocomplete.mode", DEFAULT_SETTINGS["autocomplete.mode"])
+        or DEFAULT_SETTINGS["autocomplete.mode"]
+    ).strip()
+    if value in AUTOCOMPLETE_MODES:
+        return value
+    return DEFAULT_SETTINGS["autocomplete.mode"]
 
 
 def resolve_naia_port(settings: dict | None = None) -> int:

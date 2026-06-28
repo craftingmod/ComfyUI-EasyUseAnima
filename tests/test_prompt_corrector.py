@@ -23,7 +23,12 @@ from autocomplete_dataset import (
     resolve_autocomplete_source,
     search_autocomplete,
 )
-from settings import NAIA_PREPROCESSING_KEYS, public_settings, resolve_autocomplete_limit
+from settings import (
+    NAIA_PREPROCESSING_KEYS,
+    public_settings,
+    resolve_autocomplete_limit,
+    resolve_autocomplete_mode,
+)
 
 
 class PromptCorrectorTests(unittest.TestCase):
@@ -863,6 +868,7 @@ class SettingsTests(unittest.TestCase):
                 "prompt.metadata_filter_words",
                 "autocomplete.source",
                 "autocomplete.limit",
+                "autocomplete.mode",
                 "lora_preset.name_display",
                 "prompt_studio.typo_indicator",
                 "prompt_studio.colors",
@@ -882,6 +888,24 @@ class SettingsTests(unittest.TestCase):
         self.assertEqual(resolve_autocomplete_limit({"autocomplete.limit": "37"}), 37)
         self.assertEqual(resolve_autocomplete_limit({"autocomplete.limit": "200"}), 100)
         self.assertEqual(resolve_autocomplete_limit({"autocomplete.limit": "bad"}), 20)
+
+    def test_autocomplete_mode_is_validated(self):
+        self.assertEqual(
+            resolve_autocomplete_mode({"autocomplete.mode": "off"}),
+            "off",
+        )
+        self.assertEqual(
+            resolve_autocomplete_mode({"autocomplete.mode": "easyuse_nodes"}),
+            "easyuse_nodes",
+        )
+        self.assertEqual(
+            resolve_autocomplete_mode({"autocomplete.mode": "compatible_global"}),
+            "compatible_global",
+        )
+        self.assertEqual(
+            resolve_autocomplete_mode({"autocomplete.mode": "bad"}),
+            "compatible_global",
+        )
 
 
 class AutocompleteDatasetTests(unittest.TestCase):

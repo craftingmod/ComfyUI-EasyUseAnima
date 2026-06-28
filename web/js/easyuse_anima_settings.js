@@ -131,6 +131,11 @@ const SETTINGS_TEXT = {
     set: "set",
     empty: "empty",
     autocompleteGuide: "Choose which bundled CSV is used for tag autocomplete and Prompt Studio tag highlighting. Korean searches use the selected CSV description text.",
+    autocompleteMode: "Autocomplete mode",
+    autocompleteModeOff: "Off",
+    autocompleteModeEasyUse: "EasyUse Anima nodes only",
+    autocompleteModeCompatible: "Compatible global",
+    autocompleteModeGuide: "Controls where EasyUse Anima autocomplete is active. Compatible global keeps the current behavior and avoids nodes that already provide their own autocomplete.",
     suggestions: "Suggestions",
     autocompleteReady: "Autocomplete CSV is ready",
     autocompleteMissing: "Selected autocomplete CSV is missing.",
@@ -192,6 +197,11 @@ const SETTINGS_TEXT = {
     set: "입력됨",
     empty: "비어 있음",
     autocompleteGuide: "태그 자동완성과 Prompt Studio 태그 하이라이트에 사용할 내장 CSV를 선택합니다. 한국어 검색은 선택한 CSV의 설명 텍스트를 사용합니다.",
+    autocompleteMode: "자동완성 적용 범위",
+    autocompleteModeOff: "전부 끄기",
+    autocompleteModeEasyUse: "EasyUse Anima 노드에서만",
+    autocompleteModeCompatible: "호환 전역 모드",
+    autocompleteModeGuide: "EasyUse Anima 자동완성이 동작할 위치를 정합니다. 호환 전역 모드는 기존 방식이며 자체 자동완성을 가진 노드는 제외합니다.",
     suggestions: "추천 수",
     autocompleteReady: "자동완성 CSV 준비됨",
     autocompleteMissing: "선택한 자동완성 CSV가 없습니다.",
@@ -782,6 +792,10 @@ function autocompleteDatasetSelector(initialValue = {}) {
     typeof initialValue === "object" && initialValue !== null
       ? initialValue.limit || 20
       : 20;
+  const initialMode =
+    typeof initialValue === "object" && initialValue !== null
+      ? initialValue.mode || "compatible_global"
+      : "compatible_global";
   const container = document.createElement("div");
   container.style.cssText = SETTINGS_PANEL_STYLE;
 
@@ -789,6 +803,31 @@ function autocompleteDatasetSelector(initialValue = {}) {
   guide.textContent = textFor(settings, "autocompleteGuide");
   guide.style.cssText = "opacity: 0.78;";
   container.append(guide);
+
+  const modeGuide = document.createElement("div");
+  modeGuide.textContent = textFor(settings, "autocompleteModeGuide");
+  modeGuide.style.cssText = "opacity: 0.68; font-size: 0.92em;";
+  container.append(modeGuide);
+
+  const modeRow = document.createElement("label");
+  modeRow.style.cssText = "display: flex; flex-direction: column; gap: 4px; min-width: 0;";
+  const modeText = document.createElement("span");
+  modeText.textContent = textFor(settings, "autocompleteMode");
+  const modeSelect = document.createElement("select");
+  modeSelect.style.cssText = "box-sizing: border-box; width: min(100%, 340px); padding: 4px 8px;";
+  for (const [value, labelKey] of [
+    ["off", "autocompleteModeOff"],
+    ["easyuse_nodes", "autocompleteModeEasyUse"],
+    ["compatible_global", "autocompleteModeCompatible"],
+  ]) {
+    const option = document.createElement("option");
+    option.value = value;
+    option.textContent = textFor(settings, labelKey);
+    option.selected = value === initialMode;
+    modeSelect.append(option);
+  }
+  modeRow.append(modeText, modeSelect);
+  container.append(modeRow);
 
   const row = document.createElement("div");
   row.style.cssText = SETTINGS_ROW_STYLE;
@@ -846,12 +885,15 @@ function autocompleteDatasetSelector(initialValue = {}) {
   const saveAutocompleteSettings = async () => {
     try {
       const limit = Math.max(1, Math.min(100, Number.parseInt(limitInput.value || "20", 10) || 20));
+      const sourceValue = select.value || initialSource || settings["autocomplete.source"] || "";
       limitInput.value = String(limit);
       setStatus(message, textFor(settings, "saving"), "#64748b");
-      await saveSetting("autocomplete.source", select.value);
-      const data = await saveSetting("autocomplete.limit", String(limit));
-      updateSettingCache("autocomplete.source", select.value);
+      await saveSetting("autocomplete.source", sourceValue);
+      await saveSetting("autocomplete.limit", String(limit));
+      const data = await saveSetting("autocomplete.mode", modeSelect.value);
+      updateSettingCache("autocomplete.source", sourceValue);
       updateSettingCache("autocomplete.limit", String(limit));
+      updateSettingCache("autocomplete.mode", modeSelect.value);
       setStatus(message, textFor(settings, "saved"), "#16a34a");
       renderOptions({ sources: panel._easyuseSources || [], source: data["autocomplete.source"] });
       window.dispatchEvent(new CustomEvent("easyuse-anima-settings-updated", { detail: data }));
@@ -861,6 +903,7 @@ function autocompleteDatasetSelector(initialValue = {}) {
     }
   };
 
+  modeSelect.addEventListener("change", () => saveAutocompleteSettings());
   select.addEventListener("change", () => saveAutocompleteSettings());
   limitInput.addEventListener("input", () => {
     scheduleSettingSave("autocomplete.limit", String(
@@ -963,6 +1006,7 @@ app.registerExtension({
       type: () => autocompleteDatasetSelector({
         source: latestSettings()["autocomplete.source"] || "",
         limit: latestSettings()["autocomplete.limit"] || 20,
+        mode: latestSettings()["autocomplete.mode"] || "compatible_global",
       }),
       tooltip: textFor(latestSettings(), "settingsAutocompleteCsvTooltip"),
     });
