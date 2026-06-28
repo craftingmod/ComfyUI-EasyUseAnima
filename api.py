@@ -121,6 +121,43 @@ def _list_lora_profiles() -> list[dict]:
     return profiles
 
 
+def _clear_folder_paths_cache(folder_paths, folder_name: str):
+    cache = getattr(folder_paths, "filename_list_cache", None)
+    if isinstance(cache, dict):
+        cache.pop(folder_name, None)
+    cache_helper = getattr(folder_paths, "cache_helper", None)
+    if cache_helper is not None and not getattr(cache_helper, "active", False):
+        clear = getattr(cache_helper, "clear", None)
+        if callable(clear):
+            clear()
+
+
+def _list_loras() -> list[str]:
+    try:
+        import folder_paths  # type: ignore
+    except Exception:
+        return []
+
+    _clear_folder_paths_cache(folder_paths, "loras")
+    try:
+        names = folder_paths.get_filename_list("loras")
+    except Exception:
+        names = []
+
+    loras = []
+    seen = set()
+    for name in names:
+        text = str(name or "").strip()
+        if not text or text == "None":
+            continue
+        key = text.replace("\\", "/").casefold()
+        if key in seen:
+            continue
+        seen.add(key)
+        loras.append(text)
+    return loras
+
+
 def _save_lora_profile(name: str, data: dict) -> dict:
     safe_name = _sanitize_lora_profile_name(name)
     payload = _normalize_lora_profile_payload(data)
@@ -288,6 +325,10 @@ if web is not None and routes is not None:
             preview_path,
             headers={"Content-Disposition": f'filename="{os.path.basename(preview_path)}"'},
         )
+
+    @routes.get("/easyuse_anima/loras")
+    async def loras_handler(request):
+        return web.json_response({"loras": _list_loras()})
 
     @routes.get("/easyuse_anima/lora_profiles")
     async def lora_profiles_handler(request):

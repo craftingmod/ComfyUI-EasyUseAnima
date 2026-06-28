@@ -104,7 +104,8 @@ async function loadLoraPresetSettings() {
 }
 
 async function fetchJson(url, options = {}) {
-  const response = await fetch(url, options);
+  const fetcher = typeof api?.fetchApi === "function" ? api.fetchApi.bind(api) : fetch;
+  const response = await fetcher(url, options);
   let data = null;
   try {
     data = await response.json();
@@ -623,15 +624,72 @@ function comboValues(widget) {
     return raw;
   }
   if (raw && typeof raw === "object") {
-    return Object.keys(raw);
+    return Object.entries(raw).flatMap(([key, value]) => [key, value]);
   }
   return [];
 }
 
+function comboEntryText(value, depth = 0) {
+  if (value == null || depth > 2) {
+    return "";
+  }
+  if (typeof value === "string" || typeof value === "number") {
+    return String(value).trim();
+  }
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      const text = comboEntryText(item, depth + 1);
+      if (text) {
+        return text;
+      }
+    }
+    return "";
+  }
+  if (typeof value === "object") {
+    for (const key of ["value", "content", "name", "title", "text", "label"]) {
+      const text = comboEntryText(value[key], depth + 1);
+      if (text && text !== "[object Object]") {
+        return text;
+      }
+    }
+  }
+  return "";
+}
+
+function normalizeLoraNameList(values) {
+  const seen = new Set();
+  const names = [];
+  for (const value of values || []) {
+    const text = comboEntryText(value);
+    if (!text || text === "None" || text === "[object Object]") {
+      continue;
+    }
+    const key = text.replace(/\\/g, "/").toLowerCase();
+    if (seen.has(key)) {
+      continue;
+    }
+    seen.add(key);
+    names.push(text);
+  }
+  return names;
+}
+
 function loraNameValues(node) {
-  return comboValues(findWidget(node, "lora_name"))
-    .map((value) => String(value || "").trim())
-    .filter((value) => value && value !== "None");
+  return normalizeLoraNameList(comboValues(findWidget(node, "lora_name")));
+}
+
+async function fetchLoraNameValues(node) {
+  try {
+    const data = await fetchJson("/easyuse_anima/loras");
+    const values = normalizeLoraNameList(data?.loras);
+    for (const name of values) {
+      missingPreviewNames.delete(name);
+    }
+    return values;
+  } catch (error) {
+    console.warn("[EasyUse Anima] failed to refresh LoRA list; using cached widget values", error);
+    return loraNameValues(node);
+  }
 }
 
 function roundStrength(value) {
@@ -1068,13 +1126,13 @@ function loraDisplayName(name) {
   return text.replace(/\\/g, "/").split("/").pop() || text;
 }
 
-function openLoraMenu(node, event, pos, onChoose) {
-  const values = loraNameValues(node);
+async function openLoraMenu(node, event, pos, onChoose) {
+  const clientPoint = menuClientPoint(node, pos, event);
+  const values = await fetchLoraNameValues(node);
   if (!values.length) {
     window.alert("No LoRA files found. Refresh ComfyUI after adding LoRAs.");
     return;
   }
-  const clientPoint = menuClientPoint(node, pos, event);
   node.__easyuseAnimaOpeningLoraMenu = true;
   node.__easyuseAnimaLoraMenuPoint = clientPoint;
   activeLoraMenuNode = node;
@@ -1084,7 +1142,7 @@ function openLoraMenu(node, event, pos, onChoose) {
     scale: Math.max(1, Number(app.canvas?.ds?.scale) || 1),
     className: "dark easyuse-anima-lora-menu",
     callback: (value) => {
-      const name = String(value?.content ?? value ?? "").trim();
+      const name = comboEntryText(value);
       if (name) {
         onChoose(loraEntryFromName(name));
       }
@@ -1097,6 +1155,19 @@ function ensureLoraMenuSearch(menu, node) {
     return;
   }
   menu.__easyuseAnimaSearchReady = true;
+  const existingInput = menu.querySelector(".comfy-context-menu-filter, input[type='search'], input");
+  if (existingInput) {
+    const applyExistingSearch = () => {
+      applyLoraMenuSearch(menu, existingInput.value);
+      positionMenu(menu, node?.__easyuseAnimaLoraMenuPoint);
+    };
+    existingInput.addEventListener("input", applyExistingSearch);
+    window.requestAnimationFrame(() => {
+      existingInput.focus();
+      applyExistingSearch();
+    });
+    return;
+  }
   const input = createEl("input", {
     className: "easyuse-anima-lora-search",
   });
