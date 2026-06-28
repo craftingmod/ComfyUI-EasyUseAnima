@@ -3,18 +3,114 @@ import { app } from "../../../scripts/app.js";
 const ROOT_CATEGORY = "EASY USE ANIMA";
 
 const PROMPT_STUDIO_COLORS = {
-  quality: { en: "Quality", ko: "품질", color: "#facc15" },
-  safety: { en: "Rating", ko: "등급", color: "#38bdf8" },
-  year: { en: "Year", ko: "연도", color: "#2dd4bf" },
-  count: { en: "Count", ko: "인원수", color: "#60a5fa" },
-  character: { en: "Character", ko: "캐릭터", color: "#f472b6" },
-  artist: { en: "Artist", ko: "작가", color: "#a78bfa" },
-  copyright: { en: "Copyright", ko: "작품", color: "#fb923c" },
-  general: { en: "Trained tag", ko: "학습 태그", color: "#4ade80" },
-  meta: { en: "Meta", ko: "메타", color: "#94a3b8" },
-  natural: { en: "Natural language", ko: "자연어", color: "#cbd5e1" },
-  artist_unknown: { en: "Unregistered artist", ko: "미등록 작가", color: "#f87171" },
-  unknown: { en: "Unknown", ko: "미확인", color: "#cbd5e1" },
+  quality: {
+    en: "Quality",
+    ko: "품질",
+    color: "#facc15",
+    tip: {
+      en: "ANIMA quality/meta tags such as masterpiece, best quality, highres, and aesthetic. Not a Danbooru category number.",
+      ko: "masterpiece, best quality, highres, aesthetic 같은 ANIMA 품질/메타 태그입니다. Danbooru 카테고리 번호는 없습니다.",
+    },
+  },
+  safety: {
+    en: "Rating",
+    ko: "등급",
+    color: "#38bdf8",
+    tip: {
+      en: "Rating-style tags such as safe, sensitive, nsfw, explicit, or rating_*.",
+      ko: "safe, sensitive, nsfw, explicit, rating_* 같은 등급 계열 태그입니다.",
+    },
+  },
+  year: {
+    en: "Year",
+    ko: "연도",
+    color: "#2dd4bf",
+    tip: {
+      en: "Year bucket tags such as newest, recent, mid, early, oldest, or year n.",
+      ko: "newest, recent, mid, early, oldest, year n 같은 연도 버킷 태그입니다.",
+    },
+  },
+  count: {
+    en: "Count",
+    ko: "인원수",
+    color: "#60a5fa",
+    tip: {
+      en: "Person-count tags such as 1girl, 2boys, or multiple girls. These are usually Danbooru category 0 but are highlighted separately.",
+      ko: "1girl, 2boys, multiple girls 같은 인원수 태그입니다. 보통 Danbooru category 0이지만 별도 색상으로 표시합니다.",
+    },
+  },
+  character: {
+    en: "Character",
+    ko: "캐릭터",
+    color: "#f472b6",
+    tip: {
+      en: "Danbooru category 4: character tags.",
+      ko: "Danbooru category 4: 캐릭터 태그입니다.",
+    },
+  },
+  artist: {
+    en: "Artist",
+    ko: "작가",
+    color: "#a78bfa",
+    tip: {
+      en: "Danbooru category 1: artist tags. EasyUse Anima also treats @artist prompt tokens as artist tags.",
+      ko: "Danbooru category 1: 작가 태그입니다. EasyUse Anima는 @작가 형식의 프롬프트 토큰도 작가 태그로 취급합니다.",
+    },
+  },
+  copyright: {
+    en: "Copyright",
+    ko: "작품",
+    color: "#fb923c",
+    tip: {
+      en: "Danbooru category 3: copyright/work tags.",
+      ko: "Danbooru category 3: 작품명/저작권 태그입니다.",
+    },
+  },
+  general: {
+    en: "Trained tag",
+    ko: "학습 태그",
+    color: "#4ade80",
+    tip: {
+      en: "Danbooru category 0: general tags that are present in the selected autocomplete CSV.",
+      ko: "Danbooru category 0: 선택한 자동완성 CSV에 있는 일반 태그입니다.",
+    },
+  },
+  meta: {
+    en: "Meta",
+    ko: "메타",
+    color: "#94a3b8",
+    tip: {
+      en: "Danbooru category 5: meta tags.",
+      ko: "Danbooru category 5: 메타 태그입니다.",
+    },
+  },
+  natural: {
+    en: "Natural language",
+    ko: "자연어",
+    color: "#cbd5e1",
+    tip: {
+      en: "Natural-language prompt text, not a Danbooru tag category.",
+      ko: "자연어 프롬프트 문장입니다. Danbooru 태그 카테고리가 아닙니다.",
+    },
+  },
+  artist_unknown: {
+    en: "Unregistered artist",
+    ko: "미등록 작가",
+    color: "#f87171",
+    tip: {
+      en: "An @artist token that is not found in the artist index.",
+      ko: "@작가 형식이지만 작가 인덱스에서 찾지 못한 토큰입니다.",
+    },
+  },
+  unknown: {
+    en: "Unknown",
+    ko: "미확인",
+    color: "#cbd5e1",
+    tip: {
+      en: "A tag that was not found in the selected autocomplete CSV or built-in meta rules.",
+      ko: "선택한 자동완성 CSV와 내장 메타 규칙에서 찾지 못한 태그입니다.",
+    },
+  },
 };
 
 const NAIA_PREPROCESSING_OPTIONS = [
@@ -43,7 +139,7 @@ const TEXT = {
     autocompleteMode: "Autocomplete mode",
     autocompleteModeTip: "Controls where EasyUse Anima autocomplete is active.",
     autocompleteCsvTip: "Select which bundled Korean Danbooru CSV powers autocomplete and tag highlighting.",
-    autocompleteLimitTip: "Maximum number of autocomplete suggestions to show.",
+    autocompleteLimitTip: "",
     highlightBehavior: "Highlight behavior",
     highlightColor: "Highlight color",
     loraDisplay: "LoRA display",
@@ -51,9 +147,12 @@ const TEXT = {
     metadataFilter: "Metadata Prompt Filter",
     metadataFilterTip: "Remove these tags only from Anima Prompt Builder metadata_prompt.",
     naiaGeneralAutoToggle: "Auto toggle General fields above NAIA",
+    naiaGeneralAutoToggleTip:
+      "In Anima Prompt Studio Advanced, when the positive NAIA Prompt field is ON, this disables only positive General fields placed above that NAIA field. When the NAIA field is OFF, those General fields are enabled again. Fields below NAIA and negative fields are not changed.",
     naiaEndpoint: "Connection",
     naiaPromptEngineering: "Prompt Engineering",
-    naiaSettingsTip: "Configure NAIA host, port, Prompt Engineering override, and preprocessing options.",
+    naiaDesktopPromptEngineeringTip:
+      "ON: ComfyUI does not send Prompt Engineering override values and NAIA 2.0 uses its own desktop settings. OFF: ComfyUI sends the values below as overrides for this request.",
     preprocessingOptions: "Preprocessing options",
     prePrompt: "Pre prompt",
     postPrompt: "Post prompt",
@@ -69,7 +168,7 @@ const TEXT = {
     autocompleteMode: "자동완성 적용 범위",
     autocompleteModeTip: "EasyUse Anima 자동완성이 동작할 위치를 정합니다.",
     autocompleteCsvTip: "자동완성과 태그 하이라이트에 사용할 한국어 Danbooru CSV를 선택합니다.",
-    autocompleteLimitTip: "자동완성 창에 표시할 추천 항목 수입니다.",
+    autocompleteLimitTip: "",
     highlightBehavior: "하이라이트 동작",
     highlightColor: "하이라이트 색상",
     loraDisplay: "LoRA 표시",
@@ -77,9 +176,12 @@ const TEXT = {
     metadataFilter: "Metadata Prompt 필터",
     metadataFilterTip: "Anima Prompt Builder metadata_prompt에서만 지정 태그를 제거합니다.",
     naiaGeneralAutoToggle: "NAIA 위쪽 General 자동 토글",
+    naiaGeneralAutoToggleTip:
+      "Anima Prompt Studio Advanced에서 긍정 프롬프트의 NAIA Prompt 필드가 켜지면, 그 NAIA 필드보다 위에 있는 긍정 General 필드만 자동으로 OFF합니다. NAIA 필드가 꺼지면 해당 General 필드를 다시 ON합니다. NAIA 아래 필드와 네거티브 필드는 건드리지 않습니다.",
     naiaEndpoint: "연결",
     naiaPromptEngineering: "Prompt Engineering",
-    naiaSettingsTip: "NAIA host, port, Prompt Engineering override, 전처리 옵션을 설정합니다.",
+    naiaDesktopPromptEngineeringTip:
+      "ON: ComfyUI의 Prompt Engineering override 값을 보내지 않고 NAIA 2.0 프로그램의 자체 설정을 사용합니다. OFF: 아래 ComfyUI 설정값을 이번 요청의 override로 NAIA에 보냅니다.",
     preprocessingOptions: "전처리 옵션",
     prePrompt: "Pre prompt",
     postPrompt: "Post prompt",
@@ -139,6 +241,10 @@ function label(item) {
   return item?.[isKorean() ? "ko" : "en"] || item?.en || "";
 }
 
+function tip(item) {
+  return item?.tip?.[isKorean() ? "ko" : "en"] || item?.tip?.en || "";
+}
+
 function parseColors(value) {
   try {
     const parsed = JSON.parse(value || "{}");
@@ -186,9 +292,9 @@ function setting({ id, section, group, name, tooltip, type, defaultValue, option
     id,
     name,
     category: [ROOT_CATEGORY, section, name],
-    tooltip,
     type,
     defaultValue,
+    ...(tooltip ? { tooltip } : {}),
     ...(options ? { options } : {}),
     ...(attrs ? { attrs } : {}),
     onChange:
@@ -206,7 +312,7 @@ function colorSetting(colorKey, item) {
     section: "Prompt",
     group: t("highlightColor"),
     name: `${t("highlightColor")}: ${label(item)}`,
-    tooltip: t("highlightColor"),
+    tooltip: tip(item),
     type: "color",
     defaultValue: item.color,
     onChange: (value) => updateColorSetting(colorKey, value),
@@ -258,7 +364,6 @@ const EASYUSE_ANIMA_SETTINGS = [
     section: "Prompt",
     group: t("highlightBehavior"),
     name: t("showTypoIndicators"),
-    tooltip: t("showTypoIndicators"),
     type: "boolean",
     defaultValue: true,
   }),
@@ -267,7 +372,7 @@ const EASYUSE_ANIMA_SETTINGS = [
     section: "Prompt",
     group: t("highlightBehavior"),
     name: t("naiaGeneralAutoToggle"),
-    tooltip: t("naiaGeneralAutoToggle"),
+    tooltip: t("naiaGeneralAutoToggleTip"),
     type: "boolean",
     defaultValue: false,
   }),
@@ -287,7 +392,6 @@ const EASYUSE_ANIMA_SETTINGS = [
     section: "NAIA",
     group: t("naiaEndpoint"),
     name: "Host",
-    tooltip: t("naiaSettingsTip"),
     type: "text",
     defaultValue: "127.0.0.1",
   }),
@@ -296,7 +400,6 @@ const EASYUSE_ANIMA_SETTINGS = [
     section: "NAIA",
     group: t("naiaEndpoint"),
     name: "Port",
-    tooltip: t("naiaSettingsTip"),
     type: "number",
     defaultValue: 7243,
     attrs: { min: 1, max: 65535, step: 1 },
@@ -306,7 +409,7 @@ const EASYUSE_ANIMA_SETTINGS = [
     section: "NAIA",
     group: t("naiaPromptEngineering"),
     name: t("useDesktopNaia"),
-    tooltip: t("naiaSettingsTip"),
+    tooltip: t("naiaDesktopPromptEngineeringTip"),
     type: "boolean",
     defaultValue: true,
   }),
@@ -320,7 +423,6 @@ const EASYUSE_ANIMA_SETTINGS = [
       section: "NAIA",
       group: t("naiaPromptEngineering"),
       name: t(textKey),
-      tooltip: t("naiaSettingsTip"),
       type: "text",
       defaultValue: "",
     }),
@@ -331,7 +433,6 @@ const EASYUSE_ANIMA_SETTINGS = [
       section: "NAIA",
       group: t("preprocessingOptions"),
       name: label(item),
-      tooltip: t("naiaSettingsTip"),
       type: "combo",
       defaultValue: "skip",
       options: ["skip", "on", "off"],
