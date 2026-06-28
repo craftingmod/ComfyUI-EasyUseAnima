@@ -1024,6 +1024,15 @@ def _raise_missing_loras(profile_index: int, missing_loras: list[str]):
 class EasyUseAnimaPromptCorrector:
     """ANIMA prompt order correction node."""
 
+    DESCRIPTION = (
+        "Normalizes ANIMA prompt text, keeps natural-language casing, reorders known "
+        "ANIMA sections, and reports unknown or duplicate tags."
+    )
+    OUTPUT_TOOLTIPS = (
+        "Prompt text after ANIMA ordering and syntax cleanup.",
+        "JSON report containing changed state, unknown tags, duplicate tags, warnings, and sections.",
+    )
+
     @classmethod
     def INPUT_TYPES(cls):
         return {
@@ -1092,6 +1101,17 @@ class EasyUseAnimaPromptCorrector:
 
 class EasyUseAnimaPromptBuilder:
     """Build cleaned ANIMA prompts for NAIA and Anima Mod Guidance workflows."""
+
+    DESCRIPTION = (
+        "Combines quality, trigger, LoRA trigger, body, and trailing prompt fields into "
+        "ANIMA-friendly prompt outputs, including metadata and Mod Guidance outputs."
+    )
+    OUTPUT_TOOLTIPS = (
+        "Final positive prompt. When Mod Guidance is enabled, leading quality tags are excluded.",
+        "Quality prompt text intended for Anima Mod Guidance.",
+        "Boolean flag passed through for Anima Mod Guidance workflow control.",
+        "Prompt text for metadata, independent from Mod Guidance routing and metadata filters.",
+    )
 
     @classmethod
     def INPUT_TYPES(cls):
@@ -1220,6 +1240,10 @@ class EasyUseAnimaPromptBuilder:
 class EasyUseAnimaPromptStudio(EasyUseAnimaPromptBuilder):
     """Prompt Builder variant with enhanced front-end editing helpers."""
 
+    DESCRIPTION = (
+        "An enhanced Prompt Builder with front-end editing, autocomplete, and tag highlighting helpers."
+    )
+
     @classmethod
     def INPUT_TYPES(cls):
         return {
@@ -1303,6 +1327,21 @@ class EasyUseAnimaPromptStudio(EasyUseAnimaPromptBuilder):
 
 class EasyUseAnimaPromptStudioAdvanced:
     """Dynamic positive/negative Prompt Studio with serialized field blocks."""
+
+    DESCRIPTION = (
+        "Advanced Prompt Studio with reorderable positive and negative fields, NAIA fill support, "
+        "trigger input handling, Mod Guidance routing, metadata outputs, and latent resolution output."
+    )
+    OUTPUT_TOOLTIPS = (
+        "Final positive prompt assembled from enabled positive fields.",
+        "Final negative prompt assembled from enabled negative fields.",
+        "Positive quality fields routed to Anima Mod Guidance.",
+        "Boolean flag passed through for Anima Mod Guidance workflow control.",
+        "Positive metadata prompt with metadata filters applied.",
+        "Negative metadata prompt with metadata filters applied.",
+        "Selected latent width.",
+        "Selected latent height.",
+    )
 
     @classmethod
     def INPUT_TYPES(cls):
@@ -1790,6 +1829,18 @@ class EasyUseAnimaPromptStudioExtend:
 class EasyUseAnimaLoraPreset:
     """Multi-profile LoRA stack preset node for ANIMA style prompts."""
 
+    DESCRIPTION = (
+        "Stores multiple ANIMA LoRA preset profiles, builds a LoRA stack, emits trigger words, "
+        "and preserves profile data in workflow metadata."
+    )
+    OUTPUT_TOOLTIPS = (
+        "Corrected style prompt for artist tags, model triggers, or short style directions.",
+        "LoRA stack compatible with LoRA stack loaders.",
+        "Trigger words collected from selected LoRA metadata.",
+        "Text representation of enabled LoRAs and strengths.",
+        "Currently selected profile index after wrapping to the available profile count.",
+    )
+
     @classmethod
     def INPUT_TYPES(cls):
         return {
@@ -1940,6 +1991,17 @@ class EasyUseAnimaLoraPreset:
 
 class EasyUseAnimaNAIARandomPrompt:
     """NAIA random prompt node with bypass and frozen-output cache."""
+
+    DESCRIPTION = (
+        "Requests a random prompt from NAIA Remote API, supports bypass and frozen output reuse, "
+        "and stores generated values so saved-image workflows can reproduce the same result."
+    )
+    OUTPUT_TOOLTIPS = (
+        "Prompt text from NAIA or the original input when bypassed or not overridden.",
+        "Negative prompt text from NAIA or the original input when bypassed or not overridden.",
+        "Width from NAIA or the original input when bypassed or not overridden.",
+        "Height from NAIA or the original input when bypassed or not overridden.",
+    )
 
     @classmethod
     def INPUT_TYPES(cls):
