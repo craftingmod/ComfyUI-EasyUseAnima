@@ -286,6 +286,22 @@ def _comfy_sampler_names() -> list[str]:
         ]
 
 
+def _comfy_checkpoint_names() -> list[str]:
+    try:
+        import folder_paths  # type: ignore
+
+        names = [str(name) for name in folder_paths.get_filename_list("checkpoints")]
+        if names:
+            return names
+    except Exception:
+        pass
+    return ["sam3.1_multiplex_fp16.safetensors"]
+
+
+def _preferred_checkpoint_default(names: list[str], preferred: str) -> str:
+    return preferred if preferred in names else names[0]
+
+
 def _impact_core_module():
     module = sys.modules.get("impact.core")
     if module is not None:
@@ -343,6 +359,155 @@ def _find_impact_detailer_class():
         "[EasyUseAnima] Anima Detailer requires ComfyUI Impact Pack's DetailerForEach. "
         "Install/enable ComfyUI-Impact-Pack, then restart ComfyUI."
     )
+
+
+def _find_comfy_node_class(node_id: str):
+    try:
+        import nodes as comfy_nodes  # type: ignore
+
+        mappings = getattr(comfy_nodes, "NODE_CLASS_MAPPINGS", {})
+        cls = mappings.get(node_id)
+        if cls is not None:
+            return cls
+        cls = getattr(comfy_nodes, node_id, None)
+        if cls is not None:
+            return cls
+    except Exception:
+        pass
+    return None
+
+
+def _load_checkpoint_with_comfy(ckpt_name: str):
+    loader_cls = _find_comfy_node_class("CheckpointLoaderSimple")
+    if loader_cls is None:
+        raise RuntimeError("[EasyUseAnima] Could not find ComfyUI CheckpointLoaderSimple.")
+    loader = loader_cls()
+    method = getattr(loader, "load_checkpoint", None)
+    if method is None:
+        raise RuntimeError("[EasyUseAnima] CheckpointLoaderSimple does not expose load_checkpoint.")
+    return method(ckpt_name)
+
+
+def _encode_with_comfy_clip(clip, text: str):
+    encoder_cls = _find_comfy_node_class("CLIPTextEncode")
+    if encoder_cls is None:
+        raise RuntimeError("[EasyUseAnima] Could not find ComfyUI CLIPTextEncode.")
+    encoder = encoder_cls()
+    method = getattr(encoder, "encode", None)
+    if method is None:
+        raise RuntimeError("[EasyUseAnima] CLIPTextEncode does not expose encode.")
+    result = method(clip, text)
+    if not isinstance(result, tuple) or not result:
+        raise RuntimeError("[EasyUseAnima] CLIPTextEncode returned no conditioning.")
+    return result[0]
+
+
+def _find_sam3_detect_class():
+    cls = _find_comfy_node_class("SAM3_Detect")
+    if cls is not None:
+        return cls
+    try:
+        module = importlib.import_module("comfy_extras.nodes_sam3")
+        cls = getattr(module, "SAM3_Detect", None)
+        if cls is not None:
+            return cls
+    except Exception:
+        pass
+    raise RuntimeError(
+        "[EasyUseAnima] SAM3_Detect was not found. "
+        "Use a ComfyUI build with native SAM3 support, then restart ComfyUI."
+    )
+
+
+def _find_impact_mask_to_segs_class():
+    cls = _find_comfy_node_class("MaskToSEGS")
+    if cls is not None:
+        return cls
+
+    for module in list(sys.modules.values()):
+        mappings = getattr(module, "NODE_CLASS_MAPPINGS", None)
+        if isinstance(mappings, dict):
+            cls = mappings.get("MaskToSEGS")
+            if cls is not None:
+                return cls
+
+    for module_name in ("impact.segs_nodes", "modules.impact.segs_nodes", "impact.impact_pack", "modules.impact.impact_pack"):
+        try:
+            module = importlib.import_module(module_name)
+        except Exception:
+            continue
+        cls = getattr(module, "MaskToSEGS", None)
+        if cls is not None:
+            return cls
+
+    raise RuntimeError(
+        "[EasyUseAnima] Anima SAM3 Detailer requires ComfyUI Impact Pack's MaskToSEGS. "
+        "Install/enable ComfyUI-Impact-Pack, then restart ComfyUI."
+    )
+
+
+def _node_output_tuple(result) -> tuple:
+    value = getattr(result, "result", None)
+    if value is not None:
+        return tuple(value)
+    if isinstance(result, tuple):
+        return result
+    return (result,)
+
+
+def _format_sam3_detection_prompt(detect_prompt: str, detect_count: int) -> str:
+    prompt = str(detect_prompt or "").strip()
+    if not prompt:
+        raise ValueError("[EasyUseAnima] SAM3 detect prompt is empty.")
+
+    max_det = max(1, int(detect_count))
+    parts = [part.strip() for part in re.split(r"[,\n]+", prompt) if part.strip()]
+    formatted = []
+    for part in parts:
+        if re.search(r":\s*[\d.]+\s*$", part):
+            formatted.append(part)
+        else:
+            formatted.append(f"{part}:{max_det}")
+    return ", ".join(formatted)
+
+
+def _sam3_context(model, clip, vae, ckpt_name: str = "") -> dict[str, Any]:
+    return {
+        "model": model,
+        "clip": clip,
+        "vae": vae,
+        "ckpt_name": ckpt_name,
+    }
+
+
+def _context_value(ctx, key: str):
+    if isinstance(ctx, dict):
+        return ctx.get(key)
+    return None
+
+
+def _empty_mask_for_image(image):
+    try:
+        import torch  # type: ignore
+    except Exception as exc:
+        raise RuntimeError("[EasyUseAnima] torch is required to create an empty mask.") from exc
+
+    batch = int(image.shape[0])
+    height = int(image.shape[1])
+    width = int(image.shape[2])
+    device = getattr(image, "device", None)
+    return torch.zeros((batch, height, width), dtype=torch.float32, device=device)
+
+
+def _empty_segs_for_image(image):
+    return ((int(image.shape[1]), int(image.shape[2])), [])
+
+
+def _segs_has_items(segs) -> bool:
+    try:
+        return len(segs[1]) > 0
+    except Exception:
+        return False
 
 
 def _call_impact_detailer(detailer, **kwargs):
@@ -2190,6 +2355,42 @@ class EasyUseAnimaLoraPreset:
         }
 
 
+class EasyUseAnimaSAM3Context:
+    """Load a native ComfyUI SAM3 checkpoint and expose it as ctx_SAM3."""
+
+    DESCRIPTION = (
+        "Loads a SAM3 checkpoint with ComfyUI's native checkpoint loader and returns "
+        "an rgthree-compatible context containing the SAM3 model, CLIP, and VAE."
+    )
+    OUTPUT_TOOLTIPS = (
+        "Context dict containing SAM3 model, CLIP, VAE, and checkpoint name.",
+        "SAM3 model loaded from the selected checkpoint.",
+        "SAM3 CLIP loaded from the selected checkpoint.",
+        "VAE loaded from the selected checkpoint.",
+    )
+
+    @classmethod
+    def INPUT_TYPES(cls):
+        checkpoint_names = _comfy_checkpoint_names()
+        return {
+            "required": {
+                "ckpt_name": (checkpoint_names, {
+                    "default": _preferred_checkpoint_default(checkpoint_names, "sam3.1_multiplex_fp16.safetensors"),
+                    "tooltip": "SAM3 checkpoint to load, for example sam3.1_multiplex_fp16.safetensors.",
+                }),
+            },
+        }
+
+    RETURN_TYPES = ("RGTHREE_CONTEXT", "MODEL", "CLIP", "VAE")
+    RETURN_NAMES = ("ctx_SAM3", "sam3_model", "sam3_clip", "sam3_vae")
+    FUNCTION = "load"
+    CATEGORY = "EasyUse Anima/Detailer"
+
+    def load(self, ckpt_name):
+        model, clip, vae = _load_checkpoint_with_comfy(str(ckpt_name))
+        return (_sam3_context(model, clip, vae, str(ckpt_name)), model, clip, vae)
+
+
 class EasyUseAnimaDetailer:
     """Impact-compatible ANIMA detailer entry point."""
 
@@ -2424,6 +2625,245 @@ class EasyUseAnimaDetailer:
                 raise RuntimeError("[EasyUseAnima] Impact DetailerForEach returned an empty tuple.")
             return (result[0],)
         return (result,)
+
+
+class EasyUseAnimaSAM3Detailer:
+    """Native SAM3 detection + Impact MaskToSEGS + ANIMA detailer."""
+
+    DESCRIPTION = (
+        "Runs native ComfyUI SAM3 text detection, converts the resulting mask to Impact Pack SEGS, "
+        "then delegates detailing to Anima Detailer / Impact Pack DetailerForEach."
+    )
+    OUTPUT_TOOLTIPS = (
+        "Detailed image. If disabled or no SEGS are detected, this is the original image.",
+        "Impact-compatible SEGS generated from the SAM3 mask.",
+        "SAM3 mask used to build SEGS.",
+        "Original input image before detailing.",
+    )
+
+    @classmethod
+    def INPUT_TYPES(cls):
+        max_resolution = _comfy_max_resolution()
+        detailer_inputs = EasyUseAnimaDetailer.INPUT_TYPES()
+        required = {
+            "enabled": ("BOOLEAN", {
+                "default": True,
+                "label_on": "enabled",
+                "label_off": "bypass",
+                "tooltip": "Disable to return the original image and an empty SEGS output.",
+            }),
+            "image": ("IMAGE",),
+            "ctx_SAM3": ("RGTHREE_CONTEXT", {
+                "tooltip": "ctx_SAM3 from Anima SAM3 Context or a compatible rgthree context containing model and clip.",
+            }),
+            "detect_prompt": ("STRING", {
+                "default": "face",
+                "multiline": False,
+                "dynamicPrompts": False,
+                "tooltip": "SAM3 text target. Use comma-separated targets or target:count for per-target detection count.",
+            }),
+            "detect_count": ("INT", {
+                "default": 1,
+                "min": 1,
+                "max": 64,
+                "step": 1,
+                "tooltip": "Maximum detections per target when detect_prompt does not already include :count.",
+            }),
+            "threshold": ("FLOAT", {
+                "default": 0.5,
+                "min": 0.0,
+                "max": 1.0,
+                "step": 0.01,
+                "tooltip": "SAM3 detection threshold.",
+            }),
+            "refine_iterations": ("INT", {
+                "default": 2,
+                "min": 0,
+                "max": 5,
+                "step": 1,
+                "tooltip": "SAM decoder refinement passes. 0 uses raw detector masks.",
+            }),
+            "individual_masks": ("BOOLEAN", {
+                "default": False,
+                "label_on": "enabled",
+                "label_off": "combined",
+                "tooltip": "Ask SAM3 for per-object masks. MaskToSEGS can still split a combined mask by contours.",
+            }),
+            "combined": ("BOOLEAN", {
+                "default": False,
+                "label_on": "combined",
+                "label_off": "separate",
+                "tooltip": "Impact MaskToSEGS combined option.",
+            }),
+            "crop_factor": ("FLOAT", {
+                "default": 3.0,
+                "min": 1.0,
+                "max": 100.0,
+                "step": 0.1,
+                "tooltip": "Impact MaskToSEGS crop factor.",
+            }),
+            "bbox_fill": ("BOOLEAN", {
+                "default": False,
+                "label_on": "enabled",
+                "label_off": "disabled",
+                "tooltip": "Impact MaskToSEGS bbox_fill option.",
+            }),
+            "drop_size": ("INT", {
+                "default": 10,
+                "min": 1,
+                "max": max_resolution,
+                "step": 1,
+                "tooltip": "Drop detected regions smaller than this size.",
+            }),
+            "contour_fill": ("BOOLEAN", {
+                "default": False,
+                "label_on": "enabled",
+                "label_off": "disabled",
+                "tooltip": "Impact MaskToSEGS contour_fill option.",
+            }),
+        }
+
+        for key, value in detailer_inputs["required"].items():
+            if key in ("image", "segs"):
+                continue
+            required[key] = value
+
+        return {
+            "required": required,
+            "optional": detailer_inputs.get("optional", {}),
+        }
+
+    RETURN_TYPES = ("IMAGE", "SEGS", "MASK", "IMAGE")
+    RETURN_NAMES = ("image", "segs", "mask", "raw_image")
+    FUNCTION = "doit"
+    CATEGORY = "EasyUse Anima/Detailer"
+
+    def doit(
+        self,
+        enabled,
+        image,
+        ctx_SAM3,
+        detect_prompt,
+        detect_count,
+        threshold,
+        refine_iterations,
+        individual_masks,
+        combined,
+        crop_factor,
+        bbox_fill,
+        drop_size,
+        contour_fill,
+        model,
+        clip,
+        vae,
+        guide_size,
+        guide_size_for,
+        max_size,
+        seed,
+        steps,
+        cfg,
+        sampler_name,
+        scheduler,
+        positive,
+        negative,
+        denoise,
+        feather,
+        noise_mask,
+        force_inpaint,
+        wildcard,
+        cycle=1,
+        alignment="impact",
+        preserve_conditioning_metadata=True,
+        fail_on_unsupported_opt=False,
+        detailer_hook=None,
+        inpaint_model=False,
+        noise_mask_feather=0,
+        scheduler_func_opt=None,
+        tiled_encode=False,
+        tiled_decode=False,
+    ):
+        empty_mask = _empty_mask_for_image(image)
+        empty_segs = _empty_segs_for_image(image)
+        if not _as_bool(enabled, True):
+            return (image, empty_segs, empty_mask, image)
+
+        sam3_model = _context_value(ctx_SAM3, "model")
+        sam3_clip = _context_value(ctx_SAM3, "clip")
+        if sam3_model is None or sam3_clip is None:
+            raise RuntimeError(
+                "[EasyUseAnima] ctx_SAM3 must contain SAM3 model and CLIP. "
+                "Use the Anima SAM3 Context node or a compatible rgthree context."
+            )
+
+        sam3_text = _format_sam3_detection_prompt(detect_prompt, detect_count)
+        conditioning = _encode_with_comfy_clip(sam3_clip, sam3_text)
+
+        sam3_cls = _find_sam3_detect_class()
+        sam3_result = sam3_cls.execute(
+            model=sam3_model,
+            image=image,
+            conditioning=conditioning,
+            threshold=float(threshold),
+            refine_iterations=int(refine_iterations),
+            individual_masks=_as_bool(individual_masks, False),
+        )
+        sam3_values = _node_output_tuple(sam3_result)
+        if len(sam3_values) < 1:
+            raise RuntimeError("[EasyUseAnima] SAM3_Detect returned no mask.")
+        mask = sam3_values[0]
+
+        mask_to_segs_cls = _find_impact_mask_to_segs_class()
+        mask_to_segs_result = mask_to_segs_cls.doit(
+            mask,
+            _as_bool(combined, False),
+            float(crop_factor),
+            _as_bool(bbox_fill, False),
+            int(drop_size),
+            _as_bool(contour_fill, False),
+        )
+        segs_values = _node_output_tuple(mask_to_segs_result)
+        if len(segs_values) < 1:
+            raise RuntimeError("[EasyUseAnima] MaskToSEGS returned no SEGS.")
+        segs = segs_values[0]
+
+        if not _segs_has_items(segs):
+            logger.info("[EasyUseAnima] SAM3 Detailer detected no SEGS for prompt %r.", sam3_text)
+            return (image, segs, mask, image)
+
+        detailed_image = EasyUseAnimaDetailer().doit(
+            image=image,
+            segs=segs,
+            model=model,
+            clip=clip,
+            vae=vae,
+            guide_size=guide_size,
+            guide_size_for=guide_size_for,
+            max_size=max_size,
+            seed=seed,
+            steps=steps,
+            cfg=cfg,
+            sampler_name=sampler_name,
+            scheduler=scheduler,
+            positive=positive,
+            negative=negative,
+            denoise=denoise,
+            feather=feather,
+            noise_mask=noise_mask,
+            force_inpaint=force_inpaint,
+            wildcard=wildcard,
+            cycle=cycle,
+            alignment=alignment,
+            preserve_conditioning_metadata=preserve_conditioning_metadata,
+            fail_on_unsupported_opt=fail_on_unsupported_opt,
+            detailer_hook=detailer_hook,
+            inpaint_model=inpaint_model,
+            noise_mask_feather=noise_mask_feather,
+            scheduler_func_opt=scheduler_func_opt,
+            tiled_encode=tiled_encode,
+            tiled_decode=tiled_decode,
+        )[0]
+
+        return (detailed_image, segs, mask, image)
 
 
 class EasyUseAnimaNAIARandomPrompt:
