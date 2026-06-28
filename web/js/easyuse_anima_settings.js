@@ -103,6 +103,13 @@ for (const [key] of NAIA_PREPROCESSING_OPTIONS) {
   COMFY_SETTING_IDS[`naia.${key}`] = `EasyUseAnima.NAIA.${key}`;
 }
 
+const COMFY_COLOR_SETTING_IDS = Object.fromEntries(
+  Object.keys(PROMPT_STUDIO_COLOR_DEFAULTS).map((key) => [
+    key,
+    `EasyUseAnima.Prompt.HighlightColor.${key}`,
+  ]),
+);
+
 const SETTINGS_PANEL_STYLE =
   "box-sizing: border-box; max-width: 560px; line-height: 1.45; display: flex; flex-direction: column; gap: 8px;";
 const SETTINGS_ROW_STYLE =
@@ -370,6 +377,18 @@ function mergeComfySettingValues(settings = {}) {
     if (value != null) {
       merged[internalKey] = String(value);
     }
+  }
+  const colors = parseColorSettings(merged["prompt_studio.colors"]);
+  let hasColorOverride = false;
+  for (const [colorKey, settingId] of Object.entries(COMFY_COLOR_SETTING_IDS)) {
+    const value = readComfySettingValue(settingId);
+    if (value != null && String(value).trim()) {
+      colors[colorKey] = String(value).trim();
+      hasColorOverride = true;
+    }
+  }
+  if (hasColorOverride) {
+    merged["prompt_studio.colors"] = JSON.stringify(colors);
   }
   return merged;
 }
@@ -1216,190 +1235,218 @@ function colorSettingEditor(colorKey, settings = {}) {
   return singleControlContainer(input, status);
 }
 
-function resolveRegisteredSettingText(value, fallback = "") {
-  const settings = currentSettings();
-  if (typeof value === "function") {
-    return value(settings);
+function normalizeRegisteredValue(type, value) {
+  if (type === "boolean") {
+    return value ? "true" : "false";
   }
-  if (!value) {
-    return fallback;
-  }
-  return textFor(settings, value);
+  return String(value ?? "");
 }
 
-function createRegisteredSetting(definition) {
-  const name = resolveRegisteredSettingText(definition.name, definition.id);
+function notifyRegisteredSettingChange(internalKey, value, type = "text") {
+  updateSettingCache(internalKey, normalizeRegisteredValue(type, value));
+  const settings = mergeSettingCache(currentSettings());
+  window.dispatchEvent(new CustomEvent("easyuse-anima-settings-updated", { detail: settings }));
+}
+
+function notifyRegisteredColorChange(colorKey, value) {
+  const settings = currentSettings();
+  const colors = parseColorSettings(settings["prompt_studio.colors"]);
+  colors[colorKey] = String(value || PROMPT_STUDIO_COLOR_DEFAULTS[colorKey]?.color || "#ffffff");
+  updateSettingCache("prompt_studio.colors", JSON.stringify(colors));
+  const nextSettings = mergeSettingCache(currentSettings());
+  window.dispatchEvent(new CustomEvent("easyuse-anima-settings-updated", { detail: nextSettings }));
+}
+
+function registeredSetting({
+  id,
+  internalKey,
+  section,
+  group,
+  name,
+  tooltip,
+  type,
+  defaultValue,
+  options,
+  attrs,
+  onChange,
+}) {
   return {
-    id: `EasyUseAnima.${definition.id}`,
+    id,
     name,
-    category: [
-      SETTINGS_CATEGORY_ROOT,
-      resolveRegisteredSettingText(definition.section, SETTINGS_CATEGORY_ROOT),
-      resolveRegisteredSettingText(definition.categoryName || definition.name, name),
-    ],
-    tooltip: definition.tooltip ? resolveRegisteredSettingText(definition.tooltip) : undefined,
-    defaultValue: definition.defaultValue,
-    type: () => definition.editor(currentSettings()),
+    category: [SETTINGS_CATEGORY_ROOT, section, group || name],
+    tooltip,
+    type,
+    defaultValue,
+    ...(options ? { options } : {}),
+    ...(attrs ? { attrs } : {}),
+    onChange:
+      onChange ||
+      ((value) => {
+        notifyRegisteredSettingChange(internalKey, value, type);
+      }),
   };
 }
 
+function registeredColorSetting(colorKey, item) {
+  return registeredSetting({
+    id: COMFY_COLOR_SETTING_IDS[colorKey],
+    section: "Prompt",
+    group: textFor({}, "highlightColors"),
+    name: `${textFor({}, "colorSettingName")}: ${colorLabel(item, {})}`,
+    tooltip: textFor({}, "settingsPromptStudioTooltip"),
+    type: "color",
+    defaultValue: item.color || "#ffffff",
+    onChange: (value) => notifyRegisteredColorChange(colorKey, value),
+  });
+}
+
 const EASYUSE_ANIMA_SETTING_DEFINITIONS = [
-    {
-      id: "Prompt.MetadataFilter",
-      section: "settingsPromptSectionName",
-      categoryName: "promptMetadataTitle",
-      name: "settingsPromptMetadataName",
-      tooltip: "settingsPromptMetadataTooltip",
-      editor: (settings) => textareaSettingEditor("prompt.metadata_filter_words", settings["prompt.metadata_filter_words"] || ""),
+  registeredSetting({
+    id: COMFY_SETTING_IDS["prompt.metadata_filter_words"],
+    internalKey: "prompt.metadata_filter_words",
+    section: "Prompt",
+    group: textFor({}, "promptMetadataTitle"),
+    name: textFor({}, "settingsPromptMetadataName"),
+    tooltip: textFor({}, "settingsPromptMetadataTooltip"),
+    type: "text",
+    defaultValue: "",
+  }),
+  registeredSetting({
+    id: COMFY_SETTING_IDS["autocomplete.mode"],
+    internalKey: "autocomplete.mode",
+    section: "Prompt",
+    group: textFor({}, "settingsAutocompleteCsvName"),
+    name: textFor({}, "autocompleteMode"),
+    tooltip: textFor({}, "autocompleteModeGuide"),
+    type: "combo",
+    defaultValue: "compatible_global",
+    options: ["off", "easyuse_nodes", "compatible_global"],
+  }),
+  registeredSetting({
+    id: COMFY_SETTING_IDS["autocomplete.source"],
+    internalKey: "autocomplete.source",
+    section: "Prompt",
+    group: textFor({}, "settingsAutocompleteCsvName"),
+    name: textFor({}, "autocompleteCsv"),
+    tooltip: textFor({}, "settingsAutocompleteCsvTooltip"),
+    type: "combo",
+    defaultValue: "localsmile_kr_wiki",
+    options: ["localsmile_kr_wiki", "kr_modified"],
+    onChange: (value) => {
+      notifyRegisteredSettingChange("autocomplete.source", value, "combo");
+      refreshAutocompletePanels().catch(() => {});
     },
-    {
-      id: "Prompt.AutocompleteMode",
-      section: "settingsPromptSectionName",
-      categoryName: "settingsAutocompleteCsvName",
-      name: "autocompleteMode",
-      tooltip: "autocompleteModeGuide",
-      editor: (settings) => selectSettingEditor(
-        "autocomplete.mode",
-        settings["autocomplete.mode"] || "compatible_global",
-        [
-          ["off", textFor(settings, "autocompleteModeOff")],
-          ["easyuse_nodes", textFor(settings, "autocompleteModeEasyUse")],
-          ["compatible_global", textFor(settings, "autocompleteModeCompatible")],
-        ],
-      ),
-    },
-    {
-      id: "Prompt.AutocompleteSource",
-      section: "settingsPromptSectionName",
-      categoryName: "settingsAutocompleteCsvName",
-      name: "settingsAutocompleteCsvName",
-      tooltip: "settingsAutocompleteCsvTooltip",
-      editor: autocompleteSourceSettingEditor,
-    },
-    {
-      id: "Prompt.AutocompleteLimit",
-      section: "settingsPromptSectionName",
-      categoryName: "settingsAutocompleteCsvName",
-      name: "autocompleteLimitName",
-      tooltip: "autocompleteLimitTooltip",
-      editor: (settings) => textSettingEditor("autocomplete.limit", settings["autocomplete.limit"] || 20, {
-        type: "number",
-        min: 1,
-        max: 100,
-        step: 1,
-        fallback: 20,
-        maxWidth: "120px",
-      }),
-    },
-    {
-      id: "Prompt.TypoIndicator",
-      section: "settingsPromptSectionName",
-      categoryName: "settingsPromptStudioName",
-      name: "typoIndicators",
-      tooltip: "settingsPromptStudioTooltip",
-      editor: (settings) => checkboxSettingEditor("prompt_studio.typo_indicator", settings["prompt_studio.typo_indicator"] !== "false"),
-    },
-    {
-      id: "Prompt.NaiaGeneralAutoToggle",
-      section: "settingsPromptSectionName",
-      categoryName: "settingsPromptStudioName",
-      name: "naiaGeneralAutoToggle",
-      tooltip: "promptStudioGuide",
-      editor: (settings) => checkboxSettingEditor(
-        "prompt_studio.naia_general_above_auto_toggle",
-        settings["prompt_studio.naia_general_above_auto_toggle"] === "true",
-      ),
-    },
-    ...Object.entries(PROMPT_STUDIO_COLOR_DEFAULTS).map(([colorKey, item]) => ({
-        id: `Prompt.HighlightColor.${colorKey}`,
-        section: "settingsPromptSectionName",
-        categoryName: "highlightColors",
-        name: (settings) => `${textFor(settings, "colorSettingName")}: ${colorLabel(item, settings)}`,
-        tooltip: "promptStudioGuide",
-        editor: (settings) => colorSettingEditor(colorKey, settings),
-    })),
-    {
-      id: "LoraPreset.NameDisplay",
-      section: "settingsLoraSectionName",
-      categoryName: "settingsLoraDisplayName",
-      name: "settingsLoraDisplayName",
-      tooltip: "settingsLoraDisplayTooltip",
-      editor: (settings) => selectSettingEditor(
-        "lora_preset.name_display",
-        settings["lora_preset.name_display"] || "name",
-        [
-          ["name", textFor(settings, "nameOnly")],
-          ["path", textFor(settings, "fullPath")],
-        ],
-      ),
-    },
-    {
-      id: "NAIA.Host",
-      section: "settingsNaiaSectionName",
-      categoryName: "naiaEndpoint",
-      name: () => "Host",
-      tooltip: "naiaSettingsGuide",
-      editor: (settings) => textSettingEditor("naia.host", settings["naia.host"] || "127.0.0.1"),
-    },
-    {
-      id: "NAIA.Port",
-      section: "settingsNaiaSectionName",
-      categoryName: "naiaEndpoint",
-      name: () => "Port",
-      tooltip: "naiaSettingsGuide",
-      editor: (settings) => textSettingEditor("naia.port", settings["naia.port"] || 7243, {
-        type: "number",
-        min: 1,
-        max: 65535,
-        step: 1,
-        fallback: 7243,
-        maxWidth: "140px",
-      }),
-    },
-    {
-      id: "NAIA.UseDesktopPromptEngineering",
-      section: "settingsNaiaSectionName",
-      categoryName: "naiaPromptEngineering",
-      name: "useDesktopNaia",
-      tooltip: "naiaSettingsGuide",
-      editor: (settings) => checkboxSettingEditor("naia.use_naia_settings", settings["naia.use_naia_settings"] !== "false"),
-    },
-    ...[
-      ["pre_prompt", "prePrompt"],
-      ["post_prompt", "postPrompt"],
-      ["auto_hide", "autoHide"],
-    ].map(([key, labelKey]) => ({
-        id: `NAIA.${key}`,
-        section: "settingsNaiaSectionName",
-        categoryName: "naiaPromptEngineering",
-        name: labelKey,
-        tooltip: "naiaSettingsGuide",
-        editor: (settings) => textSettingEditor(`naia.${key}`, settings[`naia.${key}`] || ""),
-    })),
-    ...NAIA_PREPROCESSING_OPTIONS.map(([key, labelText]) => ({
-        id: `NAIA.${key}`,
-        section: "settingsNaiaSectionName",
-        categoryName: "preprocessingOptions",
-        name: (settings) => {
-          const label = labelText?.[settingsLanguage(settings)] || labelText?.en || key;
-          return label;
-        },
-        tooltip: "naiaSettingsGuide",
-        editor: (settings) => selectSettingEditor(
-          `naia.${key}`,
-          settings[`naia.${key}`] || "skip",
-          [
-            ["skip", "skip"],
-            ["on", "on"],
-            ["off", "off"],
-          ],
-        ),
-    })),
+  }),
+  registeredSetting({
+    id: COMFY_SETTING_IDS["autocomplete.limit"],
+    internalKey: "autocomplete.limit",
+    section: "Prompt",
+    group: textFor({}, "settingsAutocompleteCsvName"),
+    name: textFor({}, "autocompleteLimitName"),
+    tooltip: textFor({}, "autocompleteLimitTooltip"),
+    type: "number",
+    defaultValue: 20,
+    attrs: { min: 1, max: 100, step: 1 },
+  }),
+  registeredSetting({
+    id: COMFY_SETTING_IDS["prompt_studio.typo_indicator"],
+    internalKey: "prompt_studio.typo_indicator",
+    section: "Prompt",
+    group: textFor({}, "highlightBehavior"),
+    name: textFor({}, "typoIndicators"),
+    tooltip: textFor({}, "settingsPromptStudioTooltip"),
+    type: "boolean",
+    defaultValue: true,
+  }),
+  registeredSetting({
+    id: COMFY_SETTING_IDS["prompt_studio.naia_general_above_auto_toggle"],
+    internalKey: "prompt_studio.naia_general_above_auto_toggle",
+    section: "Prompt",
+    group: textFor({}, "highlightBehavior"),
+    name: textFor({}, "naiaGeneralAutoToggle"),
+    tooltip: textFor({}, "settingsPromptStudioTooltip"),
+    type: "boolean",
+    defaultValue: false,
+  }),
+  ...Object.entries(PROMPT_STUDIO_COLOR_DEFAULTS).map(([colorKey, item]) =>
+    registeredColorSetting(colorKey, item),
+  ),
+  registeredSetting({
+    id: COMFY_SETTING_IDS["lora_preset.name_display"],
+    internalKey: "lora_preset.name_display",
+    section: "LoraPreset",
+    group: textFor({}, "loraDisplay"),
+    name: textFor({}, "loraDisplay"),
+    tooltip: textFor({}, "settingsLoraDisplayTooltip"),
+    type: "combo",
+    defaultValue: "name",
+    options: ["name", "path"],
+  }),
+  registeredSetting({
+    id: COMFY_SETTING_IDS["naia.host"],
+    internalKey: "naia.host",
+    section: "NAIA",
+    group: textFor({}, "naiaEndpoint"),
+    name: "Host",
+    tooltip: textFor({}, "settingsNaiaTooltip"),
+    type: "text",
+    defaultValue: "127.0.0.1",
+  }),
+  registeredSetting({
+    id: COMFY_SETTING_IDS["naia.port"],
+    internalKey: "naia.port",
+    section: "NAIA",
+    group: textFor({}, "naiaEndpoint"),
+    name: "Port",
+    tooltip: textFor({}, "settingsNaiaTooltip"),
+    type: "number",
+    defaultValue: 7243,
+    attrs: { min: 1, max: 65535, step: 1 },
+  }),
+  registeredSetting({
+    id: COMFY_SETTING_IDS["naia.use_naia_settings"],
+    internalKey: "naia.use_naia_settings",
+    section: "NAIA",
+    group: textFor({}, "naiaPromptEngineering"),
+    name: textFor({}, "useDesktopNaia"),
+    tooltip: textFor({}, "settingsNaiaTooltip"),
+    type: "boolean",
+    defaultValue: true,
+  }),
+  ...[
+    ["pre_prompt", "prePrompt"],
+    ["post_prompt", "postPrompt"],
+    ["auto_hide", "autoHide"],
+  ].map(([key, labelKey]) =>
+    registeredSetting({
+      id: COMFY_SETTING_IDS[`naia.${key}`],
+      internalKey: `naia.${key}`,
+      section: "NAIA",
+      group: textFor({}, "naiaPromptEngineering"),
+      name: textFor({}, labelKey),
+      tooltip: textFor({}, "settingsNaiaTooltip"),
+      type: "text",
+      defaultValue: "",
+    }),
+  ),
+  ...NAIA_PREPROCESSING_OPTIONS.map(([key, labelText]) =>
+    registeredSetting({
+      id: COMFY_SETTING_IDS[`naia.${key}`],
+      internalKey: `naia.${key}`,
+      section: "NAIA",
+      group: textFor({}, "preprocessingOptions"),
+      name: labelText?.[settingsLanguage()] || labelText?.en || key,
+      tooltip: textFor({}, "settingsNaiaTooltip"),
+      type: "combo",
+      defaultValue: "skip",
+      options: ["skip", "on", "off"],
+    }),
+  ),
 ];
 
 app.registerExtension({
   name: "easyuse-anima.settings",
-  settings: EASYUSE_ANIMA_SETTING_DEFINITIONS.map(createRegisteredSetting),
+  settings: EASYUSE_ANIMA_SETTING_DEFINITIONS,
   async setup() {
     const settings = await getSettings();
     window.__easyuseAnimaSettings = { ...settings };
