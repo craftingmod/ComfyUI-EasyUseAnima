@@ -185,7 +185,7 @@ function setting({ id, section, group, name, tooltip, type, defaultValue, option
   return {
     id,
     name,
-    category: [ROOT_CATEGORY, section, group || name],
+    category: [ROOT_CATEGORY, section, name],
     tooltip,
     type,
     defaultValue,
